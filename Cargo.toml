@@ -1,0 +1,16 @@
+[package]
+name = "cherry-browser"
+version = "0.1.0"
+edition = "2024"
+description = "CherryBrowser: an independent browser and rendering engine written in Rust"
+repository = "https://github.com/paddman/CherryBrowser"
+publish = false
+
+[dependencies]
+eframe = "0.36.2"
+reqwest = { version = "0.13.5", features = ["blocking"] }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
