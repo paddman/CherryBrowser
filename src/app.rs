@@ -124,9 +124,7 @@ impl CherryApp {
                 html::parse(&response.body)
             } else {
                 let escaped = escape_html(&response.body);
-                html::parse(&format!(
-                    "<html><body><pre>{escaped}</pre></body></html>"
-                ))
+                html::parse(&format!("<html><body><pre>{escaped}</pre></body></html>"))
             }
         } else {
             let message = format!(
@@ -312,12 +310,9 @@ impl eframe::App for CherryApp {
                         ui.spinner();
                     }
                     ui.small(footer_text);
-                    ui.with_layout(
-                        egui::Layout::right_to_left(egui::Align::Center),
-                        |ui| {
-                            ui.small("Independent Rust browser engine");
-                        },
-                    );
+                    ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                        ui.small("Independent Rust browser engine");
+                    });
                 });
             });
 
@@ -328,8 +323,7 @@ impl eframe::App for CherryApp {
             if let Some(page) = self.page.as_mut() {
                 let width = ui.available_width().max(320.0);
                 if (page.layout_width - width).abs() > 1.0 {
-                    page.layout =
-                        layout::layout_document(&page.dom, &page.stylesheet, width);
+                    page.layout = layout::layout_document(&page.dom, &page.stylesheet, width);
                     page.layout_width = width;
                 }
 

@@ -318,7 +318,9 @@ fn decode_entities(input: &str) -> String {
                     .ok()
                     .and_then(char::from_u32)
             }
-            _ if entity.starts_with('#') => entity[1..].parse::<u32>().ok().and_then(char::from_u32),
+            _ if entity.starts_with('#') => {
+                entity[1..].parse::<u32>().ok().and_then(char::from_u32)
+            }
             _ => None,
         };
 
@@ -346,10 +348,11 @@ mod tests {
         let main = dom.find_first_tag("main").unwrap();
         assert_eq!(dom.attr(main, "id"), Some("x"));
         assert!(dom.text_content(main).contains("Hello & Cherry"));
-        assert!(dom
-            .nodes()
-            .iter()
-            .any(|n| matches!(&n.kind, NodeKind::Element(e) if e.tag_name == "br")));
+        assert!(
+            dom.nodes()
+                .iter()
+                .any(|n| matches!(&n.kind, NodeKind::Element(e) if e.tag_name == "br"))
+        );
     }
 
     #[test]

@@ -136,10 +136,7 @@ pub fn layout_document(dom: &Dom, stylesheet: &Stylesheet, viewport_width: f32) 
         &inherited,
         &root_style,
         None,
-        Bounds {
-            left: 0.0,
-            width,
-        },
+        Bounds { left: 0.0, width },
     );
     flow.finish_line();
 
@@ -195,8 +192,12 @@ impl<'a> Flow<'a> {
             }
             NodeKind::Element(element) => {
                 let properties = css::cascade(self.dom, node, self.stylesheet, inherited);
-                let style =
-                    ComputedStyle::for_element(&element.tag_name, &properties, parent_style, bounds);
+                let style = ComputedStyle::for_element(
+                    &element.tag_name,
+                    &properties,
+                    parent_style,
+                    bounds,
+                );
                 if style.display == Display::None {
                     return;
                 }
@@ -251,12 +252,15 @@ impl<'a> Flow<'a> {
         let block_left = parent_bounds.left + style.margin.left;
         let available_width =
             (parent_bounds.width - style.margin.left - style.margin.right).max(1.0);
-        let block_width = style.width.unwrap_or(available_width).min(available_width).max(1.0);
+        let block_width = style
+            .width
+            .unwrap_or(available_width)
+            .min(available_width)
+            .max(1.0);
         let block_top = self.y;
 
         let content_left = block_left + style.padding.left;
-        let content_width =
-            (block_width - style.padding.left - style.padding.right).max(1.0);
+        let content_width = (block_width - style.padding.left - style.padding.right).max(1.0);
         let content_bounds = Bounds {
             left: content_left,
             width: content_width,
@@ -315,7 +319,8 @@ impl<'a> Flow<'a> {
             return;
         }
 
-        if self.line_left != bounds.left || (self.line_right - bounds.right()).abs() > f32::EPSILON {
+        if self.line_left != bounds.left || (self.line_right - bounds.right()).abs() > f32::EPSILON
+        {
             self.line_left = bounds.left;
             self.line_right = bounds.right();
             if self.line_height == 0.0 {
@@ -480,9 +485,7 @@ impl ComputedStyle {
             let normalized = value.trim().to_ascii_lowercase();
             style.bold = normalized == "bold"
                 || normalized == "bolder"
-                || normalized
-                    .parse::<u16>()
-                    .is_ok_and(|weight| weight >= 600);
+                || normalized.parse::<u16>().is_ok_and(|weight| weight >= 600);
         }
         if let Some(value) = properties.get("font-style") {
             style.italic = matches!(
@@ -504,14 +507,62 @@ impl ComputedStyle {
             style.padding = parse_edges(value, style.font_size, bounds.width);
         }
 
-        apply_edge_override(properties, "margin-top", &mut style.margin.top, style.font_size, bounds.width);
-        apply_edge_override(properties, "margin-right", &mut style.margin.right, style.font_size, bounds.width);
-        apply_edge_override(properties, "margin-bottom", &mut style.margin.bottom, style.font_size, bounds.width);
-        apply_edge_override(properties, "margin-left", &mut style.margin.left, style.font_size, bounds.width);
-        apply_edge_override(properties, "padding-top", &mut style.padding.top, style.font_size, bounds.width);
-        apply_edge_override(properties, "padding-right", &mut style.padding.right, style.font_size, bounds.width);
-        apply_edge_override(properties, "padding-bottom", &mut style.padding.bottom, style.font_size, bounds.width);
-        apply_edge_override(properties, "padding-left", &mut style.padding.left, style.font_size, bounds.width);
+        apply_edge_override(
+            properties,
+            "margin-top",
+            &mut style.margin.top,
+            style.font_size,
+            bounds.width,
+        );
+        apply_edge_override(
+            properties,
+            "margin-right",
+            &mut style.margin.right,
+            style.font_size,
+            bounds.width,
+        );
+        apply_edge_override(
+            properties,
+            "margin-bottom",
+            &mut style.margin.bottom,
+            style.font_size,
+            bounds.width,
+        );
+        apply_edge_override(
+            properties,
+            "margin-left",
+            &mut style.margin.left,
+            style.font_size,
+            bounds.width,
+        );
+        apply_edge_override(
+            properties,
+            "padding-top",
+            &mut style.padding.top,
+            style.font_size,
+            bounds.width,
+        );
+        apply_edge_override(
+            properties,
+            "padding-right",
+            &mut style.padding.right,
+            style.font_size,
+            bounds.width,
+        );
+        apply_edge_override(
+            properties,
+            "padding-bottom",
+            &mut style.padding.bottom,
+            style.font_size,
+            bounds.width,
+        );
+        apply_edge_override(
+            properties,
+            "padding-left",
+            &mut style.padding.left,
+            style.font_size,
+            bounds.width,
+        );
 
         style.width = properties
             .get("width")
@@ -530,23 +581,23 @@ fn ua_display(tag: &str) -> Display {
             Display::None
         }
         "html" | "body" | "main" | "header" | "footer" | "nav" | "section" | "article"
-        | "aside" | "div" | "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
-        | "blockquote" | "pre" | "form" | "fieldset" | "ul" | "ol" | "li" | "dl"
-        | "dt" | "dd" | "table" | "thead" | "tbody" | "tfoot" | "tr" | "hr" => {
-            Display::Block
-        }
+        | "aside" | "div" | "p" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "blockquote"
+        | "pre" | "form" | "fieldset" | "ul" | "ol" | "li" | "dl" | "dt" | "dd" | "table"
+        | "thead" | "tbody" | "tfoot" | "tr" | "hr" => Display::Block,
         _ => Display::Inline,
     }
 }
 
 fn apply_ua_style(tag: &str, style: &mut ComputedStyle) {
     match tag {
-        "body" => style.margin = Edges {
-            top: 8.0,
-            right: 8.0,
-            bottom: 8.0,
-            left: 8.0,
-        },
+        "body" => {
+            style.margin = Edges {
+                top: 8.0,
+                right: 8.0,
+                bottom: 8.0,
+                left: 8.0,
+            }
+        }
         "p" => {
             style.margin.top = style.font_size;
             style.margin.bottom = style.font_size;
@@ -752,9 +803,11 @@ mod tests {
         let sheet = css::parse_stylesheet("p { color: #123456; }");
         let doc = layout_document(&dom, &sheet, 800.0);
         assert!(doc.height > 0.0);
-        assert!(doc.items.iter().any(
-            |item| matches!(item, PaintItem::Text(text) if text.text == "Cherry")
-        ));
+        assert!(
+            doc.items
+                .iter()
+                .any(|item| matches!(item, PaintItem::Text(text) if text.text == "Cherry"))
+        );
     }
 
     #[test]
@@ -762,8 +815,10 @@ mod tests {
         let dom = html::parse("<div>shown</div><p class='hide'>secret</p>");
         let sheet = css::parse_stylesheet(".hide { display: none; }");
         let doc = layout_document(&dom, &sheet, 600.0);
-        assert!(!doc.items.iter().any(
-            |item| matches!(item, PaintItem::Text(text) if text.text == "secret")
-        ));
+        assert!(
+            !doc.items
+                .iter()
+                .any(|item| matches!(item, PaintItem::Text(text) if text.text == "secret"))
+        );
     }
 }

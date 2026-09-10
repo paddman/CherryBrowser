@@ -215,10 +215,7 @@ impl SimpleSelector {
 }
 
 fn parse_selector(raw: &str) -> Option<Selector> {
-    let normalized = raw
-        .replace('>', " ")
-        .replace('+', " ")
-        .replace('~', " ");
+    let normalized = raw.replace('>', " ").replace('+', " ").replace('~', " ");
     let parts = normalized
         .split_whitespace()
         .filter_map(parse_simple_selector)
@@ -253,9 +250,10 @@ fn parse_simple_selector(raw: &str) -> Option<SimpleSelector> {
         .is_some_and(|ch| ch.is_ascii_alphabetic() || *ch == '_')
     {
         let start = pos;
-        while chars.get(pos).is_some_and(|ch| {
-            ch.is_ascii_alphanumeric() || matches!(*ch, '-' | '_')
-        }) {
+        while chars
+            .get(pos)
+            .is_some_and(|ch| ch.is_ascii_alphanumeric() || matches!(*ch, '-' | '_'))
+        {
             pos += 1;
         }
         selector.tag = Some(
