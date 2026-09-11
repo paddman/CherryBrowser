@@ -4,11 +4,11 @@ CherryBrowser is an **independent browser engine written in Rust**.
 
 The project does **not** embed Chromium/Blink, WebKit, Firefox/Gecko, CEF, Electron, or a system WebView. The HTML parser, DOM, CSS parser/cascade, resource orchestration, layout model, display list, hit testing, navigation policy, and page-rendering semantics in this repository are CherryBrowser code.
 
-General-purpose Rust libraries are used only for infrastructure primitives such as native OS UI, HTTP/TLS transport, compression, and image codecs. They are not browser engines.
+General-purpose Rust libraries are used only for infrastructure primitives such as native OS UI, HTTP/TLS transport, compression, font rasterization/measurement, and image codecs. They are not browser engines.
 
-## Milestone 0.3.3
+## Milestone 0.3.4
 
-CherryBrowser has an end-to-end native browsing pipeline and is now hardening compatibility, parsing correctness, Unicode text flow, cancellation, resource safety, and legacy text decoding before larger web-platform features.
+CherryBrowser has an end-to-end native browsing pipeline and now uses renderer-backed font metrics plus bounded operating-system font fallbacks for multilingual text. Cherry still owns text break policy and layout geometry; the native font stack supplies the primitive glyph measurement/rasterization used by the temporary UI shell.
 
 Implemented:
 
@@ -52,7 +52,12 @@ Implemented:
 - Thai combining marks and leading-vowel clusters kept together during line breaking
 - CJK break opportunities between ideographic/kana/hangul clusters
 - Combining marks, variation selectors, emoji modifiers, regional-indicator pairs, and ZWJ emoji sequences kept in visual clusters
-- Script-aware text-width estimation that does not charge combining marks as full characters
+- Script/cluster-aware width estimator retained for headless and pre-native-metric fallback
+- Native UI font measurement used for page layout after the first UI pass
+- Automatic relayout after the native text measurer becomes available
+- Bounded discovery of relevant system Thai/CJK/emoji fonts on Windows, Linux and macOS
+- System fallback fonts inserted at the lowest family priority so normal Latin rendering is not replaced unnecessarily
+- No font binaries bundled in this repository
 - Basic colors, margins, padding, widths, heights, font sizes, and backgrounds
 - Headings, paragraphs, links, lists, and image elements
 - PNG, JPEG, and WebP decoding
@@ -81,6 +86,11 @@ Current milestone limits are intentionally conservative while the engine matures
 - Concurrent CSS/image workers: maximum 6 per batch
 - Decoded image dimensions: maximum 8192 × 8192
 - Decoder/RGBA allocation budget: 128 MiB per image
+- System font candidates scanned: maximum 512 files
+- System fallback fonts installed: maximum 8
+- System fallback font size: maximum 32 MiB each
+- Total installed system fallback font bytes: maximum 64 MiB
+- Font directory recursion depth: maximum 4
 - Redirects: maximum 10
 - Network timeout: 25 seconds
 - Connect timeout: 10 seconds
@@ -93,9 +103,10 @@ Current milestone limits are intentionally conservative while the engine matures
 - CSS escape decoding and the complete identifier grammar
 - `var()` substitution and full custom-property computed-value semantics
 - Full Unicode Line Breaking Algorithm coverage and language-dictionary segmentation
-- Real font glyph measurement and script shaping
-- Bidirectional text layout and full Arabic/Indic shaping behavior
+- Browser-owned font selection/shaping independent from the temporary native UI font stack
+- Bidirectional text layout and complete Arabic/Indic shaping behavior
 - Correct complete inline formatting context and baseline calculation
+- Web-font loading through `@font-face`
 - CSS Flexbox/Grid
 - Full media-query evaluation
 - `srcset`, `<picture>`, responsive image selection, AVIF, GIF animation, SVG rendering
@@ -110,7 +121,7 @@ Current milestone limits are intentionally conservative while the engine matures
 - DevTools
 - Accessibility tree
 
-Modern JavaScript-heavy sites will still fail or render partially. That is expected. CherryBrowser is building the engine instead of quietly shipping somebody else's engine under a different toolbar.
+System fallback availability is platform-dependent. If a suitable Thai/CJK/emoji system font is not installed, CherryBrowser keeps using the bounded fallback estimator and the temporary native painter may still lack glyph coverage. Modern JavaScript-heavy sites will still fail or render partially. That is expected.
 
 ## Architecture
 
@@ -146,27 +157,35 @@ Cherry DOM
  cluster-safe break units
  Thai/CJK fallback wrapping
           |
-          v
- Cherry Layout Engine
-          |
-          v
-     Display List
-      |       |
-      |       +--> image paint items / texture cache
-      v
-  Native Renderer
+          +-------------------------+
+          |                         |
+          v                         v
+ native font measurer       bounded fallback estimator
+ system font fallback
+          |                         |
+          +------------+------------+
+                       |
+                       v
+              Cherry Layout Engine
+                       |
+                       v
+                  Display List
+                       |
+                       v
+                 Native Renderer
 ```
 
 Source layout:
 
 ```text
 src/
-├── app.rs          Browser shell, navigation, cancellation and history
+├── app.rs          Browser shell, navigation, cancellation and native metric hookup
 ├── cancel.rs       Cooperative cancellation token
 ├── loader.rs       Document/subresource orchestration
 ├── net.rs          HTTP/HTTPS transport and streaming resource budgets
 ├── text.rs         Web text charset/BOM/meta decoding
-├── text_layout.rs  Unicode cluster/break helpers and width estimates
+├── text_layout.rs  Unicode cluster/break helpers plus native/fallback width metrics
+├── font_support.rs Bounded system font fallback discovery and installation
 ├── dom.rs          DOM tree
 ├── html.rs         HTML tokenizer/parser
 ├── css.rs          CSS rules, selectors, declarations and cascade
@@ -186,19 +205,19 @@ Install stable Rust, then:
 cargo run --release --locked
 ```
 
-On Linux you need the normal X11/Wayland development packages required by the native window stack.
+On Linux you need the normal X11/Wayland development packages required by the native window stack. Multilingual rendering also depends on suitable fonts already installed by the operating system; CherryBrowser does not ship font binaries.
 
 ## Engineering rule
 
-CherryBrowser may use libraries for generic primitives such as TLS, sockets, graphics APIs, fonts, image codecs, compression, cryptography, and OS integration.
+CherryBrowser may use libraries for generic primitives such as TLS, sockets, graphics APIs, fonts, text shaping primitives, image codecs, compression, cryptography, and OS integration.
 
-It must not replace its browser engine with Chromium/Blink, WebKit, Gecko, CEF, Electron, a system WebView, or another browser renderer.
+It must not replace its browser engine with Chromium/Blink, WebKit, Gecko, CEF, Electron, a system WebView, or another browser renderer. Font measurement and rasterization are infrastructure primitives; Cherry still owns DOM/style semantics, break decisions, line construction, layout geometry, and display-list generation.
 
 ## Next engine milestones
 
-1. Real font metrics, shaping, bidirectional text, and stronger Unicode line-breaking behavior
-2. Correct inline formatting contexts and more of the CSS box model
-3. Attribute selectors, pseudo classes, media-query evaluation, then Flexbox/Grid
+1. Correct inline formatting contexts, baseline calculation, and stronger bidi/script shaping behavior
+2. More of the CSS box model, attribute selectors, pseudo classes, and media-query evaluation
+3. Flexbox/Grid after box/inline semantics are stable
 4. Same-Origin Policy foundation, forms/input events, cookie jar, HTTP cache, and origin storage
 5. Parser fuzzing, rendering regression tests, and a Web Platform Tests subset harness
 6. JavaScript tokenizer/parser and AST
