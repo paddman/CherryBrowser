@@ -16,5 +16,7 @@ jobs:
         run: cargo fmt --all -- --check
       - name: Check
         run: cargo check --all-targets --locked
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
       - name: Test
         run: cargo test --all-targets --locked

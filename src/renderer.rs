@@ -33,7 +33,10 @@ pub fn show_document(
             let context = ui.ctx().clone();
             let mut outcome = RenderOutcome::default();
 
-            for item in &document.items {
+            // Block backgrounds are currently emitted after their descendants once
+            // their final height is known. Paint rectangles in reverse emission order
+            // so outer backgrounds land below nested backgrounds and image placeholders.
+            for item in document.items.iter().rev() {
                 if let PaintItem::Rect(rect) = item {
                     painter.rect_filled(
                         to_egui_rect(origin, rect.rect),
