@@ -9,7 +9,7 @@ CherryBrowser owns the web-platform-facing engine layers:
 - document/resource orchestration and web URL policy
 - web text decoding policy
 - navigation cancellation policy
-- text break-unit policy and width estimation
+- text break-unit policy and line construction
 - style computation
 - layout
 - display-list generation
@@ -19,11 +19,11 @@ CherryBrowser owns the web-platform-facing engine layers:
 - future JavaScript runtime and DOM bindings
 - future compositor and process isolation
 
-Generic infrastructure libraries are allowed for TLS, HTTP framing, cryptography, OS windows, graphics APIs, image codecs, fonts and compression.
+Generic infrastructure libraries are allowed for TLS, HTTP framing, cryptography, OS windows, graphics APIs, image codecs, font loading/measurement/rasterization, shaping primitives and compression.
 
 The engine must not embed or delegate page semantics to Chromium/Blink, WebKit, Firefox/Gecko, CEF, Electron, a system WebView, or another browser renderer.
 
-## Current 0.3.3 pipeline
+## Current 0.3.4 pipeline
 
 ```text
                        +-------------------------+
@@ -87,8 +87,17 @@ URL ------------------>| Cherry network policy   |
                          | text-layout helpers    |
                          | cluster-safe units     |
                          | Thai/CJK fallback      |
-                         | width estimation       |
                          +-----------+------------+
+                                     |
+                         +-----------+------------+
+                         |                        |
+                         v                        v
+             +----------------------+  +----------------------+
+             | native font measurer |  | bounded width        |
+             | temporary UI stack   |  | estimator fallback   |
+             +----------+-----------+  +----------+-----------+
+                        |                         |
+                        +------------+------------+
                                      |
                                      v
                              +----------------+
@@ -115,15 +124,19 @@ Text responses no longer assume UTF-8 unconditionally. The current decoder gives
 
 CSS declaration parsing no longer uses raw `split(';')` / `split_once(':')`. `css_syntax.rs` tracks quoted strings, escapes, parentheses, brackets and nested braces so delimiters are recognized only at top level. Comment removal is quote-aware. `!important` is recognized only as a trailing top-level priority marker. Unsupported selector components invalidate their containing selector, and an invalid selector-list member invalidates the rule rather than broadening the match. Custom property names preserve case and inherited custom properties are carried through the style map. This is still not a standards-complete CSS tokenizer: escape decoding, the complete identifier grammar, modern selector syntax, `var()` substitution, origins/layers and many value grammars remain future work.
 
-Text layout no longer treats every whitespace-delimited substring as the only breakable unit. `text_layout.rs` builds lightweight visual clusters, keeps generic combining marks, Thai marks, variation selectors, emoji modifiers, regional-indicator pairs and ZWJ emoji sequences together, and exposes fallback break opportunities for Thai and CJK text. The width estimator works per visible cluster/script rather than charging every Unicode scalar as a full Latin character. This is an intermediate compatibility layer, not full typography: Unicode Line Breaking Algorithm coverage, dictionary-backed Thai segmentation, bidi, real font metrics and script shaping still need dedicated implementations.
+Text layout no longer treats every whitespace-delimited substring as the only breakable unit. `text_layout.rs` builds lightweight visual clusters, keeps generic combining marks, Thai marks, variation selectors, emoji modifiers, regional-indicator pairs and ZWJ emoji sequences together, and exposes fallback break opportunities for Thai and CJK text.
+
+Milestone 0.3.4 adds a text-measurement abstraction. Headless/tests and the earliest startup layout can use the bounded script/cluster estimator. Once the native UI has completed its first UI pass, Cherry installs a callback backed by the same temporary native font system used to paint text and forces the current page to relayout. This removes the old character-count estimate from the normal interactive layout path without delegating Cherry's break policy, line construction or box geometry to the UI toolkit.
+
+`font_support.rs` performs bounded discovery of relevant operating-system font files. It scores Thai/CJK/emoji candidates, limits directory recursion and file counts, enforces per-font and aggregate byte budgets, and inserts only a small number of candidates at the lowest proportional/monospace fallback priority. Font binaries are not bundled in the repository. Availability is platform-dependent, and the current system-font path is a temporary presentation primitive rather than browser-owned web-font selection.
 
 The image codec only converts bounded PNG/JPEG/WebP bytes into RGBA pixels. Cherry code decides which `<img>` resources exist, resolves URLs, deduplicates repeated image URLs, enforces fetch budgets, chooses layout geometry, emits image paint items, owns texture identity, and checks final RGBA allocation size.
 
-The egui/Glow layer is still a temporary native presentation shell. DOM/CSS semantics, layout coordinates, display-list items and hit regions are generated by Cherry code, so the shell can later be replaced by a dedicated wgpu/Vulkan/Metal/D3D compositor without replacing the browser engine.
+The egui/Glow layer remains a temporary native presentation shell. DOM/CSS semantics, break decisions, line layout, layout coordinates, display-list items and hit regions are generated by Cherry code, so the shell can later be replaced by a dedicated wgpu/Vulkan/Metal/D3D compositor and browser-owned font stack without replacing the browser engine.
 
 ## Current isolation and safety budgets
 
-Milestone 0.3.3 remains single-process, so untrusted web content is bounded aggressively:
+Milestone 0.3.4 remains single-process, so untrusted web content and local fallback discovery are bounded aggressively:
 
 - documents: 8 MiB
 - external CSS: 2 MiB each, maximum 24
@@ -131,6 +144,11 @@ Milestone 0.3.3 remains single-process, so untrusted web content is bounded aggr
 - CSS/image resource concurrency: maximum 6 workers per batch
 - decoded image dimensions: 8192 × 8192 maximum
 - decoder/RGBA allocation budget: 128 MiB per image
+- system font scan: maximum 512 candidate files
+- installed system fallback fonts: maximum 8
+- system font file size: maximum 32 MiB each
+- total installed system fallback bytes: maximum 64 MiB
+- font scan recursion: maximum depth 4
 - redirects: maximum 10
 - network timeout: 25 seconds
 - connect timeout: 10 seconds
@@ -141,13 +159,13 @@ These limits are not a replacement for renderer sandboxing. They reduce accident
 
 ## Compatibility work before JavaScript
 
-The next engine work should improve deterministic text/layout and browser security behavior before introducing a scripting runtime:
+The next engine work should improve deterministic inline layout and browser security behavior before introducing a scripting runtime:
 
 ```text
-real font metrics + shaping + bidi
+inline formatting + baselines
               |
               v
-Inline formatting context
+bidi / stronger shaping behavior
               |
               v
 Box model / selectors / media queries
