@@ -82,12 +82,15 @@ impl HtmlParser {
             return;
         }
 
-        while self.stack.len() > 1 {
-            let open = self.stack.pop().expect("stack length checked");
-            if self.dom.tag_name(open) == Some(tag.as_str()) {
-                break;
-            }
-        }
+        let Some(open_index) = self
+            .stack
+            .iter()
+            .rposition(|open| self.dom.tag_name(*open) == Some(tag.as_str()))
+        else {
+            return;
+        };
+
+        self.stack.truncate(open_index);
     }
 
     fn consume_start_tag(&mut self) {
@@ -132,7 +135,11 @@ impl HtmlParser {
             } else {
                 String::new()
             };
-            attributes.insert(name, decode_entities(&value));
+
+            // HTML ignores later attributes with the same ASCII-lowercased name.
+            attributes
+                .entry(name)
+                .or_insert_with(|| decode_entities(&value));
         }
 
         let parent = self.current_parent();
@@ -207,7 +214,7 @@ impl HtmlParser {
             _ => {
                 let start = self.pos;
                 while let Some(ch) = self.peek() {
-                    if ch.is_whitespace() || matches!(ch, '>' | '/') {
+                    if ch.is_whitespace() || ch == '>' {
                         break;
                     }
                     self.pos += 1;
@@ -361,5 +368,29 @@ mod tests {
         let script = dom.find_first_tag("script").unwrap();
         assert!(dom.text_content(script).contains("a < b"));
         assert_eq!(dom.text_content(dom.find_first_tag("p").unwrap()), "ok");
+    }
+
+    #[test]
+    fn keeps_slashes_in_unquoted_attribute_values() {
+        let dom = parse("<img src=https://cdn.example/images/a.png>");
+        let img = dom.find_first_tag("img").unwrap();
+        assert_eq!(
+            dom.attr(img, "src"),
+            Some("https://cdn.example/images/a.png")
+        );
+    }
+
+    #[test]
+    fn keeps_first_duplicate_attribute() {
+        let dom = parse("<div id=first ID=second>ok</div>");
+        let div = dom.find_first_tag("div").unwrap();
+        assert_eq!(dom.attr(div, "id"), Some("first"));
+    }
+
+    #[test]
+    fn ignores_unmatched_end_tags_without_collapsing_stack() {
+        let dom = parse("<div><span>before</bogus>after</span></div>");
+        let span = dom.find_first_tag("span").unwrap();
+        assert_eq!(dom.text_content(span), "beforeafter");
     }
 }
