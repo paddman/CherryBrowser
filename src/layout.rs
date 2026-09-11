@@ -916,7 +916,12 @@ mod tests {
             .items
             .iter()
             .filter_map(|item| match item {
-                PaintItem::Text(text) if text.text.chars().any(|ch| matches!(ch as u32, 0x0e00..=0x0e7f)) => {
+                PaintItem::Text(text)
+                    if text
+                        .text
+                        .chars()
+                        .any(|ch| matches!(ch as u32, 0x0e00..=0x0e7f)) =>
+                {
                     Some(text.rect.y)
                 }
                 _ => None,
