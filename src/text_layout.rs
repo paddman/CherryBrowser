@@ -1,7 +1,20 @@
+use std::sync::{Arc, OnceLock, RwLock};
+
+type TextMeasurer = dyn Fn(&str, f32, bool) -> f32 + Send + Sync + 'static;
+
+static TEXT_MEASURER: OnceLock<RwLock<Option<Arc<TextMeasurer>>>> = OnceLock::new();
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct TextUnit {
     pub text: String,
     pub is_space: bool,
+}
+
+pub(crate) fn set_text_measurer(measurer: Arc<TextMeasurer>) {
+    let state = TEXT_MEASURER.get_or_init(|| RwLock::new(None));
+    if let Ok(mut guard) = state.write() {
+        *guard = Some(measurer);
+    }
 }
 
 pub(crate) fn line_break_units(text: &str) -> Vec<TextUnit> {
@@ -48,6 +61,22 @@ pub(crate) fn line_break_units(text: &str) -> Vec<TextUnit> {
 }
 
 pub(crate) fn estimated_text_width(text: &str, font_size: f32, monospace: bool) -> f32 {
+    if let Some(width) = measured_text_width(text, font_size, monospace) {
+        return width;
+    }
+
+    fallback_text_width(text, font_size, monospace)
+}
+
+fn measured_text_width(text: &str, font_size: f32, monospace: bool) -> Option<f32> {
+    let state = TEXT_MEASURER.get()?;
+    let guard = state.read().ok()?;
+    let measurer = guard.as_ref()?;
+    let width = measurer(text, font_size, monospace);
+    (width.is_finite() && width >= 0.0).then_some(width)
+}
+
+fn fallback_text_width(text: &str, font_size: f32, monospace: bool) -> f32 {
     text_clusters(text)
         .iter()
         .map(|cluster| estimated_cluster_em(cluster, monospace))
@@ -252,7 +281,7 @@ fn visible_char_em(ch: char, monospace: bool) -> f32 {
 
 #[cfg(test)]
 mod tests {
-    use super::{estimated_text_width, line_break_units};
+    use super::{estimated_text_width, fallback_text_width, line_break_units};
 
     #[test]
     fn latin_word_stays_together() {
@@ -285,14 +314,14 @@ mod tests {
 
     #[test]
     fn combining_marks_do_not_add_full_character_width() {
-        let base = estimated_text_width("ก", 16.0, false);
-        let marked = estimated_text_width("ก้", 16.0, false);
+        let base = fallback_text_width("ก", 16.0, false);
+        let marked = fallback_text_width("ก้", 16.0, false);
         assert!((base - marked).abs() < 0.01);
     }
 
     #[test]
     fn emoji_zwj_sequence_is_one_visual_cluster() {
-        let width = estimated_text_width("👩\u{200d}💻", 20.0, false);
+        let width = fallback_text_width("👩\u{200d}💻", 20.0, false);
         assert!((width - 20.0).abs() < 0.01);
         assert_eq!(line_break_units("👩\u{200d}💻").len(), 1);
     }
@@ -303,5 +332,10 @@ mod tests {
         assert_eq!(units.len(), 3);
         assert!(units[1].is_space);
         assert_eq!(units[1].text, " ");
+    }
+
+    #[test]
+    fn public_width_api_uses_fallback_without_native_measurer() {
+        assert!(estimated_text_width("Cherry", 16.0, false) > 0.0);
     }
 }
