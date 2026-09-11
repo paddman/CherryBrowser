@@ -79,11 +79,9 @@ fn encoding_from_label(label: &str) -> Option<WebEncoding> {
         "utf-8" | "utf8" | "unicode-1-1-utf-8" => Some(WebEncoding::Utf8),
         "utf-16" | "utf-16le" => Some(WebEncoding::Utf16Le),
         "utf-16be" => Some(WebEncoding::Utf16Be),
-        "windows-1252" | "cp1252" | "x-cp1252" | "iso-8859-1" | "latin1"
-        | "latin-1" | "ascii" | "us-ascii" => Some(WebEncoding::Windows1252),
-        "windows-874" | "dos-874" | "iso-8859-11" | "tis-620" => {
-            Some(WebEncoding::Windows874)
-        }
+        "windows-1252" | "cp1252" | "x-cp1252" | "iso-8859-1" | "latin1" | "latin-1" | "ascii"
+        | "us-ascii" => Some(WebEncoding::Windows1252),
+        "windows-874" | "dos-874" | "iso-8859-11" | "tis-620" => Some(WebEncoding::Windows874),
         _ => None,
     }
 }
@@ -165,11 +163,13 @@ fn windows_874_char(byte: u8) -> char {
         0x96 => '\u{2013}',
         0x97 => '\u{2014}',
         0xa0 => '\u{00a0}',
-        0xa1..=0xda => char::from_u32(0x0e01 + u32::from(byte - 0xa1))
-            .unwrap_or(char::REPLACEMENT_CHARACTER),
+        0xa1..=0xda => {
+            char::from_u32(0x0e01 + u32::from(byte - 0xa1)).unwrap_or(char::REPLACEMENT_CHARACTER)
+        }
         0xdf => '\u{0e3f}',
-        0xe0..=0xfb => char::from_u32(0x0e40 + u32::from(byte - 0xe0))
-            .unwrap_or(char::REPLACEMENT_CHARACTER),
+        0xe0..=0xfb => {
+            char::from_u32(0x0e40 + u32::from(byte - 0xe0)).unwrap_or(char::REPLACEMENT_CHARACTER)
+        }
         0xdb..=0xde | 0xfc..=0xff => char::REPLACEMENT_CHARACTER,
         _ => char::from_u32(u32::from(byte)).unwrap_or(char::REPLACEMENT_CHARACTER),
     }
@@ -182,7 +182,11 @@ mod tests {
     #[test]
     fn utf8_bom_wins() {
         assert_eq!(
-            decode_web_text(b"\xef\xbb\xbfCherry", "text/html; charset=windows-1252", true),
+            decode_web_text(
+                b"\xef\xbb\xbfCherry",
+                "text/html; charset=windows-1252",
+                true
+            ),
             "Cherry"
         );
     }
@@ -210,6 +214,9 @@ mod tests {
 
     #[test]
     fn invalid_utf8_without_charset_falls_back_to_windows_1252() {
-        assert_eq!(decode_web_text(b"caf\xe9", "text/plain", false), "caf\u{e9}");
+        assert_eq!(
+            decode_web_text(b"caf\xe9", "text/plain", false),
+            "caf\u{e9}"
+        );
     }
 }
