@@ -78,9 +78,7 @@ pub(crate) fn strip_comments(input: &str) -> String {
                 out.push_str(&input[segment_start..pos]);
                 let comment_start = pos;
                 pos += 2;
-                while pos + 1 < bytes.len()
-                    && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/')
-                {
+                while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
                     pos += 1;
                 }
 
@@ -180,8 +178,7 @@ pub(crate) fn skip_at_rule(input: &str, start: usize) -> usize {
             match bytes[pos] {
                 b';' => return pos + 1,
                 b'{' => {
-                    return find_matching_brace(input, pos)
-                        .map_or(input.len(), |close| close + 1);
+                    return find_matching_brace(input, pos).map_or(input.len(), |close| close + 1);
                 }
                 _ => {}
             }
@@ -265,11 +262,8 @@ mod tests {
 
     #[test]
     fn finds_only_top_level_property_colon() {
-        let (name, value) = split_once_top_level(
-            r#"background:url("data:image/svg+xml;a:b")"#,
-            b':',
-        )
-        .unwrap();
+        let (name, value) =
+            split_once_top_level(r#"background:url("data:image/svg+xml;a:b")"#, b':').unwrap();
         assert_eq!(name, "background");
         assert!(value.contains("a:b"));
     }
