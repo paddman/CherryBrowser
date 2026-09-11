@@ -8,6 +8,7 @@ use std::{
 use eframe::egui;
 
 use crate::{
+    cancel::CancellationToken,
     css::{self, Stylesheet},
     dom::{Dom, NodeId},
     html,
@@ -27,6 +28,7 @@ enum HistoryMode {
 struct PendingNavigation {
     receiver: Receiver<Result<LoadedDocument, String>>,
     history_mode: HistoryMode,
+    cancel: CancellationToken,
 }
 
 struct Page {
@@ -61,7 +63,7 @@ impl CherryApp {
             pending: None,
             history: Vec::new(),
             history_pos: None,
-            status: "Cherry Engine 0.2".to_string(),
+            status: "Cherry Engine 0.3.1".to_string(),
             hovered_href: None,
             last_error: None,
         };
@@ -79,19 +81,26 @@ impl CherryApp {
             }
         };
 
+        if let Some(pending) = self.pending.take() {
+            pending.cancel.cancel();
+        }
+
         self.url_input = normalized.clone();
         self.status = format!("Loading {normalized}");
         self.last_error = None;
 
+        let cancel = CancellationToken::new();
+        let worker_cancel = cancel.clone();
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
-            let result = loader::load(&normalized);
+            let result = loader::load_with_cancel(&normalized, &worker_cancel);
             let _ = sender.send(result);
         });
 
         self.pending = Some(PendingNavigation {
             receiver,
             history_mode,
+            cancel,
         });
     }
 
@@ -140,7 +149,7 @@ impl CherryApp {
             html::parse(&format!("<html><body><pre>{escaped}</pre></body></html>"))
         } else {
             let message = format!(
-                "CherryBrowser milestone 0.2 cannot render content type {} yet.",
+                "CherryBrowser milestone 0.3.1 cannot render content type {} yet.",
                 response.content_type
             );
             html::parse(&format!(
