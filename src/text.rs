@@ -97,17 +97,21 @@ fn decode_as(bytes: &[u8], encoding: WebEncoding) -> String {
 }
 
 fn decode_utf16(bytes: &[u8], little_endian: bool) -> String {
-    let units = bytes.chunks_exact(2).map(|pair| {
-        let pair = [pair[0], pair[1]];
+    let (pairs, remainder) = bytes.as_chunks::<2>();
+    let units = pairs.iter().map(|pair| {
         if little_endian {
-            u16::from_le_bytes(pair)
+            u16::from_le_bytes(*pair)
         } else {
-            u16::from_be_bytes(pair)
+            u16::from_be_bytes(*pair)
         }
     });
-    char::decode_utf16(units)
+    let mut decoded: String = char::decode_utf16(units)
         .map(|result| result.unwrap_or(char::REPLACEMENT_CHARACTER))
-        .collect()
+        .collect();
+    if !remainder.is_empty() {
+        decoded.push(char::REPLACEMENT_CHARACTER);
+    }
+    decoded
 }
 
 fn decode_windows_1252(bytes: &[u8]) -> String {
@@ -210,6 +214,12 @@ mod tests {
     fn decodes_utf16le_bom() {
         let bytes = [0xff, 0xfe, b'C', 0, b'B', 0];
         assert_eq!(decode_web_text(&bytes, "text/html", true), "CB");
+    }
+
+    #[test]
+    fn odd_utf16_byte_becomes_replacement_character() {
+        let bytes = [0xff, 0xfe, b'C', 0, b'B'];
+        assert_eq!(decode_web_text(&bytes, "text/html", true), "C\u{fffd}");
     }
 
     #[test]
