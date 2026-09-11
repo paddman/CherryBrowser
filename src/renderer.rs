@@ -1,6 +1,12 @@
+use std::collections::HashMap;
+
 use eframe::egui;
 
-use crate::layout::{LayoutDocument, PaintItem, RectF, Rgba};
+use crate::{
+    dom::NodeId,
+    image_data::DecodedImage,
+    layout::{LayoutDocument, PaintItem, RectF, Rgba},
+};
 
 #[derive(Debug, Clone, Default)]
 pub struct RenderOutcome {
@@ -8,7 +14,12 @@ pub struct RenderOutcome {
     pub hovered_href: Option<String>,
 }
 
-pub fn show_document(ui: &mut egui::Ui, document: &LayoutDocument) -> RenderOutcome {
+pub fn show_document(
+    ui: &mut egui::Ui,
+    document: &LayoutDocument,
+    images: &HashMap<NodeId, DecodedImage>,
+    textures: &mut HashMap<NodeId, egui::TextureHandle>,
+) -> RenderOutcome {
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
@@ -19,6 +30,7 @@ pub fn show_document(ui: &mut egui::Ui, document: &LayoutDocument) -> RenderOutc
 
             let origin = ui.min_rect().min;
             let painter = ui.painter().clone();
+            let context = ui.ctx().clone();
             let mut outcome = RenderOutcome::default();
 
             for item in &document.items {
@@ -29,6 +41,34 @@ pub fn show_document(ui: &mut egui::Ui, document: &LayoutDocument) -> RenderOutc
                         to_color32(rect.color),
                     );
                 }
+            }
+
+            for item in &document.items {
+                let PaintItem::Image(image_item) = item else {
+                    continue;
+                };
+                let Some(decoded) = images.get(&image_item.node) else {
+                    continue;
+                };
+
+                let texture = textures.entry(image_item.node).or_insert_with(|| {
+                    let color_image = egui::ColorImage::from_rgba_unmultiplied(
+                        [decoded.width as usize, decoded.height as usize],
+                        &decoded.rgba,
+                    );
+                    context.load_texture(
+                        format!("cherry-image-{}", image_item.node),
+                        color_image,
+                        egui::TextureOptions::LINEAR,
+                    )
+                });
+
+                painter.image(
+                    texture.id(),
+                    to_egui_rect(origin, image_item.rect),
+                    egui::Rect::from_min_max(egui::Pos2::ZERO, egui::pos2(1.0, 1.0)),
+                    egui::Color32::WHITE,
+                );
             }
 
             for (index, item) in document.items.iter().enumerate() {
