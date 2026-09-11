@@ -407,7 +407,7 @@ mod tests {
 
     use crate::html;
 
-    use super::{cascade, parse_declarations, parse_stylesheet, Properties};
+    use super::{Properties, cascade, parse_declarations, parse_stylesheet};
 
     #[test]
     fn parses_and_matches_descendant_selectors() {
