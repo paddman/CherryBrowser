@@ -28,6 +28,7 @@ struct PendingNavigation {
 
 struct Page {
     url: String,
+    base_url: String,
     title: String,
     status_code: u16,
     dom: Dom,
@@ -119,14 +120,20 @@ impl CherryApp {
     }
 
     fn install_response(&mut self, loaded: LoadedDocument, history_mode: HistoryMode) {
-        let response = loaded.response;
-        let dom = if is_renderable_text(&response.content_type) {
-            if response.content_type.to_ascii_lowercase().contains("html") {
-                html::parse(&response.body)
-            } else {
-                let escaped = escape_html(&response.body);
-                html::parse(&format!("<html><body><pre>{escaped}</pre></body></html>"))
-            }
+        let LoadedDocument {
+            response,
+            dom: loaded_dom,
+            base_url,
+            stylesheet_source,
+            external_stylesheets,
+            resource_warnings,
+        } = loaded;
+
+        let dom = if let Some(dom) = loaded_dom {
+            dom
+        } else if is_renderable_text(&response.content_type) {
+            let escaped = escape_html(&response.body);
+            html::parse(&format!("<html><body><pre>{escaped}</pre></body></html>"))
         } else {
             let message = format!(
                 "CherryBrowser milestone 0.2 cannot render content type {} yet.",
@@ -138,25 +145,25 @@ impl CherryApp {
             ))
         };
 
-        let stylesheet = css::parse_stylesheet(&loaded.stylesheet_source);
+        let stylesheet = css::parse_stylesheet(&stylesheet_source);
         let title = document_title(&dom).unwrap_or_else(|| response.final_url.clone());
         let layout_width = 1000.0;
         let layout = layout::layout_document(&dom, &stylesheet, layout_width);
 
         self.current_url = response.final_url.clone();
         self.url_input = response.final_url.clone();
-        self.status = if loaded.resource_warnings.is_empty() {
+        self.status = if resource_warnings.is_empty() {
             format!(
                 "HTTP {} · {} · CSS {} · Cherry Engine",
-                response.status, response.content_type, loaded.external_stylesheets
+                response.status, response.content_type, external_stylesheets
             )
         } else {
             format!(
                 "HTTP {} · {} · CSS {} · {} resource warning(s)",
                 response.status,
                 response.content_type,
-                loaded.external_stylesheets,
-                loaded.resource_warnings.len()
+                external_stylesheets,
+                resource_warnings.len()
             )
         };
         self.last_error = None;
@@ -167,6 +174,7 @@ impl CherryApp {
 
         self.page = Some(Page {
             url: response.final_url,
+            base_url,
             title,
             status_code: response.status,
             dom,
@@ -228,7 +236,7 @@ impl CherryApp {
         let base = self
             .page
             .as_ref()
-            .map(|page| page.url.as_str())
+            .map(|page| page.base_url.as_str())
             .unwrap_or(self.current_url.as_str());
 
         match net::resolve_url(base, href) {
