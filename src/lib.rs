@@ -7,6 +7,7 @@ pub mod app;
 pub mod css;
 pub mod dom;
 pub mod html;
+pub mod image_data;
 pub mod layout;
 pub mod loader;
 pub mod net;
