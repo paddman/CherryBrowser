@@ -1,6 +1,9 @@
 use std::{
     collections::HashMap,
-    sync::mpsc::{self, Receiver, TryRecvError},
+    sync::{
+        Arc,
+        mpsc::{self, Receiver, TryRecvError},
+    },
     thread,
     time::Duration,
 };
@@ -11,11 +14,11 @@ use crate::{
     cancel::CancellationToken,
     css::{self, Stylesheet},
     dom::{Dom, NodeId},
-    html,
+    font_support, html,
     image_data::DecodedImage,
     layout::{self, LayoutDocument},
     loader::{self, LoadedDocument},
-    net, renderer,
+    net, renderer, text_layout,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -52,10 +55,13 @@ pub struct CherryApp {
     status: String,
     hovered_href: Option<String>,
     last_error: Option<String>,
+    native_metrics_installed: bool,
+    system_font_count: usize,
 }
 
 impl CherryApp {
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+    pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        let system_font_count = font_support::install_system_fallbacks(&cc.egui_ctx).len();
         let mut app = Self {
             url_input: "https://example.com/".to_string(),
             current_url: String::new(),
@@ -63,9 +69,11 @@ impl CherryApp {
             pending: None,
             history: Vec::new(),
             history_pos: None,
-            status: "Cherry Engine 0.3.1".to_string(),
+            status: "Cherry Engine 0.3.4".to_string(),
             hovered_href: None,
             last_error: None,
+            native_metrics_installed: false,
+            system_font_count,
         };
         app.navigate("https://example.com/", HistoryMode::Push);
         app
@@ -149,7 +157,7 @@ impl CherryApp {
             html::parse(&format!("<html><body><pre>{escaped}</pre></body></html>"))
         } else {
             let message = format!(
-                "CherryBrowser milestone 0.3.1 cannot render content type {} yet.",
+                "CherryBrowser milestone 0.3.4 cannot render content type {} yet.",
                 response.content_type
             );
             html::parse(&format!(
@@ -168,16 +176,21 @@ impl CherryApp {
         self.url_input = response.final_url.clone();
         self.status = if resource_warnings.is_empty() {
             format!(
-                "HTTP {} · {} · CSS {} · IMG {} · Cherry Engine",
-                response.status, response.content_type, external_stylesheets, image_count
-            )
-        } else {
-            format!(
-                "HTTP {} · {} · CSS {} · IMG {} · {} resource warning(s)",
+                "HTTP {} · {} · CSS {} · IMG {} · FONT {} · Cherry Engine",
                 response.status,
                 response.content_type,
                 external_stylesheets,
                 image_count,
+                self.system_font_count
+            )
+        } else {
+            format!(
+                "HTTP {} · {} · CSS {} · IMG {} · FONT {} · {} resource warning(s)",
+                response.status,
+                response.content_type,
+                external_stylesheets,
+                image_count,
+                self.system_font_count,
                 resource_warnings.len()
             )
         };
@@ -271,6 +284,33 @@ impl CherryApp {
         self.history_pos
             .is_some_and(|pos| pos + 1 < self.history.len())
     }
+
+    fn ensure_native_text_metrics(&mut self, ui: &egui::Ui) {
+        if self.native_metrics_installed {
+            return;
+        }
+
+        let context = ui.ctx().clone();
+        text_layout::set_text_measurer(Arc::new(move |text, font_size, monospace| {
+            let family = if monospace {
+                egui::FontFamily::Monospace
+            } else {
+                egui::FontFamily::Proportional
+            };
+            let font = egui::FontId::new(font_size, family);
+            context.fonts_mut(|fonts| {
+                fonts
+                    .layout_no_wrap(text.to_owned(), font, egui::Color32::WHITE)
+                    .size()
+                    .x
+            })
+        }));
+        self.native_metrics_installed = true;
+
+        if let Some(page) = self.page.as_mut() {
+            page.layout_width = 0.0;
+        }
+    }
 }
 
 impl eframe::App for CherryApp {
@@ -283,6 +323,8 @@ impl eframe::App for CherryApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.ensure_native_text_metrics(ui);
+
         enum Action {
             Back,
             Forward,
