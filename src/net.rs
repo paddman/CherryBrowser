@@ -9,6 +9,7 @@ use reqwest::{
 
 const MAX_DOCUMENT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_STYLESHEET_BYTES: usize = 2 * 1024 * 1024;
+const MAX_IMAGE_BYTES: usize = 12 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct FetchResponse {
@@ -17,6 +18,15 @@ pub struct FetchResponse {
     pub status: u16,
     pub content_type: String,
     pub body: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct BinaryFetchResponse {
+    pub requested_url: String,
+    pub final_url: String,
+    pub status: u16,
+    pub content_type: String,
+    pub body: Vec<u8>,
 }
 
 pub fn normalize_url(input: &str) -> Result<String, String> {
@@ -46,7 +56,7 @@ pub fn resolve_url(base: &str, target: &str) -> Result<String, String> {
 }
 
 pub fn fetch(url: &str) -> Result<FetchResponse, String> {
-    fetch_with_limit(
+    fetch_text_with_limit(
         url,
         "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
         MAX_DOCUMENT_BYTES,
@@ -54,10 +64,39 @@ pub fn fetch(url: &str) -> Result<FetchResponse, String> {
 }
 
 pub fn fetch_stylesheet(url: &str) -> Result<FetchResponse, String> {
-    fetch_with_limit(url, "text/css,*/*;q=0.1", MAX_STYLESHEET_BYTES)
+    fetch_text_with_limit(url, "text/css,*/*;q=0.1", MAX_STYLESHEET_BYTES)
 }
 
-fn fetch_with_limit(url: &str, accept: &str, max_bytes: usize) -> Result<FetchResponse, String> {
+pub fn fetch_image(url: &str) -> Result<BinaryFetchResponse, String> {
+    fetch_bytes_with_limit(
+        url,
+        "image/avif,image/webp,image/png,image/jpeg,image/*;q=0.8,*/*;q=0.1",
+        MAX_IMAGE_BYTES,
+    )
+}
+
+fn fetch_text_with_limit(
+    url: &str,
+    accept: &str,
+    max_bytes: usize,
+) -> Result<FetchResponse, String> {
+    let response = fetch_bytes_with_limit(url, accept, max_bytes)?;
+    let body = String::from_utf8_lossy(&response.body).into_owned();
+
+    Ok(FetchResponse {
+        requested_url: response.requested_url,
+        final_url: response.final_url,
+        status: response.status,
+        content_type: response.content_type,
+        body,
+    })
+}
+
+fn fetch_bytes_with_limit(
+    url: &str,
+    accept: &str,
+    max_bytes: usize,
+) -> Result<BinaryFetchResponse, String> {
     let normalized = normalize_url(url)?;
     let client = Client::builder()
         .user_agent("CherryBrowser/0.2 (+https://github.com/paddman/CherryBrowser)")
@@ -104,14 +143,12 @@ fn fetch_with_limit(url: &str, accept: &str, max_bytes: usize) -> Result<FetchRe
         ));
     }
 
-    let body = String::from_utf8_lossy(&bytes).into_owned();
-
-    Ok(FetchResponse {
+    Ok(BinaryFetchResponse {
         requested_url,
         final_url,
         status,
         content_type,
-        body,
+        body: bytes.to_vec(),
     })
 }
 
