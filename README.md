@@ -6,9 +6,9 @@ The project does **not** embed Chromium/Blink, WebKit, Firefox/Gecko, CEF, Elect
 
 General-purpose Rust libraries are used only for infrastructure primitives such as native OS UI, HTTP/TLS transport, compression, and image codecs. They are not browser engines.
 
-## Milestone 0.3.2
+## Milestone 0.3.3
 
-CherryBrowser has an end-to-end native browsing pipeline and is now hardening compatibility, parsing correctness, cancellation, resource safety, and legacy text decoding before larger web-platform features.
+CherryBrowser has an end-to-end native browsing pipeline and is now hardening compatibility, parsing correctness, Unicode text flow, cancellation, resource safety, and legacy text decoding before larger web-platform features.
 
 Implemented:
 
@@ -47,7 +47,12 @@ Implemented:
 - `!important`, inline style, specificity, source-order, and declaration-order priority handling
 - Safe skipping of unsupported at-rules
 - Block and inline flow layout
-- Text wrapping
+- Unicode-aware text break units instead of whitespace-only wrapping
+- Thai fallback break opportunities for long text without ASCII spaces
+- Thai combining marks and leading-vowel clusters kept together during line breaking
+- CJK break opportunities between ideographic/kana/hangul clusters
+- Combining marks, variation selectors, emoji modifiers, regional-indicator pairs, and ZWJ emoji sequences kept in visual clusters
+- Script-aware text-width estimation that does not charge combining marks as full characters
 - Basic colors, margins, padding, widths, heights, font sizes, and backgrounds
 - Headings, paragraphs, links, lists, and image elements
 - PNG, JPEG, and WebP decoding
@@ -87,8 +92,10 @@ Current milestone limits are intentionally conservative while the engine matures
 - Full standards-complete CSS tokenizer/grammar, origins/layers, and modern selector grammar
 - CSS escape decoding and the complete identifier grammar
 - `var()` substitution and full custom-property computed-value semantics
-- Correct complete inline formatting context and text shaping
-- Unicode/Thai line-breaking engine independent from whitespace splitting
+- Full Unicode Line Breaking Algorithm coverage and language-dictionary segmentation
+- Real font glyph measurement and script shaping
+- Bidirectional text layout and full Arabic/Indic shaping behavior
+- Correct complete inline formatting context and baseline calculation
 - CSS Flexbox/Grid
 - Full media-query evaluation
 - `srcset`, `<picture>`, responsive image selection, AVIF, GIF animation, SVG rendering
@@ -135,6 +142,11 @@ Cherry DOM
  +--------------------+
           |
           v
+ Cherry Text Layout Helpers
+ cluster-safe break units
+ Thai/CJK fallback wrapping
+          |
+          v
  Cherry Layout Engine
           |
           v
@@ -149,18 +161,19 @@ Source layout:
 
 ```text
 src/
-├── app.rs         Browser shell, navigation, cancellation and history
-├── cancel.rs      Cooperative cancellation token
-├── loader.rs      Document/subresource orchestration
-├── net.rs         HTTP/HTTPS transport and streaming resource budgets
-├── text.rs        Web text charset/BOM/meta decoding
-├── dom.rs         DOM tree
-├── html.rs        HTML tokenizer/parser
-├── css.rs         CSS rules, selectors, declarations and cascade
-├── css_syntax.rs  CSS syntax-aware scanning and top-level splitting
-├── image_data.rs  Bounded PNG/JPEG/WebP decoding
-├── layout.rs      Block/inline layout and display list
-├── renderer.rs    Native painting, image textures and link hit testing
+├── app.rs          Browser shell, navigation, cancellation and history
+├── cancel.rs       Cooperative cancellation token
+├── loader.rs       Document/subresource orchestration
+├── net.rs          HTTP/HTTPS transport and streaming resource budgets
+├── text.rs         Web text charset/BOM/meta decoding
+├── text_layout.rs  Unicode cluster/break helpers and width estimates
+├── dom.rs          DOM tree
+├── html.rs         HTML tokenizer/parser
+├── css.rs          CSS rules, selectors, declarations and cascade
+├── css_syntax.rs   CSS syntax-aware scanning and top-level splitting
+├── image_data.rs   Bounded PNG/JPEG/WebP decoding
+├── layout.rs       Block/inline layout and display list
+├── renderer.rs     Native painting, image textures and link hit testing
 ├── lib.rs
 └── main.rs
 ```
@@ -183,7 +196,7 @@ It must not replace its browser engine with Chromium/Blink, WebKit, Gecko, CEF, 
 
 ## Next engine milestones
 
-1. Unicode line breaking, Thai-aware wrapping, grapheme handling, and real glyph measurement/shaping
+1. Real font metrics, shaping, bidirectional text, and stronger Unicode line-breaking behavior
 2. Correct inline formatting contexts and more of the CSS box model
 3. Attribute selectors, pseudo classes, media-query evaluation, then Flexbox/Grid
 4. Same-Origin Policy foundation, forms/input events, cookie jar, HTTP cache, and origin storage
