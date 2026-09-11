@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use crate::dom::{Dom, NodeId, NodeKind};
+use crate::{
+    css_syntax,
+    dom::{Dom, NodeId, NodeKind},
+};
 
 pub type Properties = HashMap<String, String>;
 
@@ -46,7 +49,7 @@ struct CascadePriority {
 }
 
 pub fn parse_stylesheet(input: &str) -> Stylesheet {
-    let cleaned = strip_comments(input);
+    let cleaned = css_syntax::strip_comments(input);
     let mut rules = Vec::new();
     let mut source_order = 0;
     let mut pos = 0;
@@ -58,16 +61,15 @@ pub fn parse_stylesheet(input: &str) -> Stylesheet {
         }
 
         if cleaned.as_bytes()[pos] == b'@' {
-            pos = skip_at_rule(&cleaned, pos);
+            pos = css_syntax::skip_at_rule(&cleaned, pos);
             continue;
         }
 
-        let Some(relative_open) = cleaned[pos..].find('{') else {
+        let Some(open) = css_syntax::find_top_level_char(&cleaned, pos, b'{') else {
             break;
         };
-        let open = pos + relative_open;
         let selector_text = cleaned[pos..open].trim();
-        let Some(close) = find_matching_brace(&cleaned, open) else {
+        let Some(close) = css_syntax::find_matching_brace(&cleaned, open) else {
             break;
         };
         let body = &cleaned[open + 1..close];
@@ -77,10 +79,14 @@ pub fn parse_stylesheet(input: &str) -> Stylesheet {
             continue;
         }
 
-        let selectors = selector_text
-            .split(',')
-            .filter_map(parse_selector)
-            .collect::<Vec<_>>();
+        let selector_parts = css_syntax::split_top_level(selector_text, b',');
+        let Some(selectors) = selector_parts
+            .into_iter()
+            .map(|selector| parse_selector(selector.trim()))
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
         if selectors.is_empty() {
             continue;
         }
@@ -102,13 +108,14 @@ pub fn parse_stylesheet(input: &str) -> Stylesheet {
 }
 
 pub fn parse_declarations(input: &str) -> Vec<Declaration> {
-    input
-        .split(';')
+    let cleaned = css_syntax::strip_comments(input);
+    css_syntax::split_top_level(&cleaned, b';')
+        .into_iter()
         .filter_map(|part| {
-            let (name, value) = part.split_once(':')?;
-            let name = name.trim().to_ascii_lowercase();
-            let (value, important) = parse_important(value);
-            if name.is_empty() || value.is_empty() {
+            let (name, value) = css_syntax::split_once_top_level(part, b':')?;
+            let name = normalize_property_name(name.trim())?;
+            let (value, important) = css_syntax::strip_trailing_important(value);
+            if value.is_empty() {
                 return None;
             }
 
@@ -133,6 +140,11 @@ pub fn cascade(
     for name in INHERITED_PROPERTIES {
         if let Some(value) = inherited.get(*name) {
             properties.insert((*name).to_string(), value.clone());
+        }
+    }
+    for (name, value) in inherited {
+        if name.starts_with("--") {
+            properties.insert(name.clone(), value.clone());
         }
     }
 
@@ -273,8 +285,8 @@ fn parse_selector(raw: &str) -> Option<Selector> {
 
     let parts = raw
         .split_whitespace()
-        .filter_map(parse_simple_selector)
-        .collect::<Vec<_>>();
+        .map(parse_simple_selector)
+        .collect::<Option<Vec<_>>>()?;
 
     if parts.is_empty() {
         return None;
@@ -300,7 +312,9 @@ fn parse_simple_selector(raw: &str) -> Option<SimpleSelector> {
     let mut pos = 0;
     let mut selector = SimpleSelector::default();
 
-    if chars
+    if chars.get(pos) == Some(&'*') {
+        pos += 1;
+    } else if chars
         .get(pos)
         .is_some_and(|ch| ch.is_ascii_alphabetic() || *ch == '_')
     {
@@ -332,7 +346,7 @@ fn parse_simple_selector(raw: &str) -> Option<SimpleSelector> {
                     pos += 1;
                 }
                 if start == pos {
-                    continue;
+                    return None;
                 }
                 let value = chars[start..pos].iter().collect::<String>();
                 if marker == '#' {
@@ -347,21 +361,22 @@ fn parse_simple_selector(raw: &str) -> Option<SimpleSelector> {
                 // broadening the match and applying styles to the wrong elements.
                 return None;
             }
-            _ => pos += 1,
+            _ => return None,
         }
     }
 
     Some(selector)
 }
 
-fn parse_important(value: &str) -> (&str, bool) {
-    let trimmed = value.trim();
-    let lower = trimmed.to_ascii_lowercase();
-    if lower.ends_with("!important") {
-        let cutoff = trimmed.len() - "!important".len();
-        (trimmed[..cutoff].trim(), true)
+fn normalize_property_name(name: &str) -> Option<String> {
+    if name.is_empty() || name.chars().any(char::is_whitespace) {
+        return None;
+    }
+
+    if name.starts_with("--") {
+        Some(name.to_string())
     } else {
-        (trimmed, false)
+        Some(name.to_ascii_lowercase())
     }
 }
 
@@ -374,95 +389,6 @@ fn skip_ascii_whitespace(input: &str, mut pos: usize) -> usize {
         pos += 1;
     }
     pos
-}
-
-fn skip_at_rule(input: &str, start: usize) -> usize {
-    let bytes = input.as_bytes();
-    let mut pos = start;
-    let mut quote = None;
-
-    while pos < bytes.len() {
-        let byte = bytes[pos];
-        if let Some(active_quote) = quote {
-            if byte == b'\\' {
-                pos = (pos + 2).min(bytes.len());
-                continue;
-            }
-            if byte == active_quote {
-                quote = None;
-            }
-            pos += 1;
-            continue;
-        }
-
-        match byte {
-            b'\'' | b'"' => quote = Some(byte),
-            b';' => return pos + 1,
-            b'{' => return find_matching_brace(input, pos).map_or(input.len(), |close| close + 1),
-            _ => {}
-        }
-        pos += 1;
-    }
-
-    input.len()
-}
-
-fn find_matching_brace(input: &str, open: usize) -> Option<usize> {
-    let bytes = input.as_bytes();
-    let mut depth = 0usize;
-    let mut quote = None;
-    let mut pos = open;
-
-    while pos < bytes.len() {
-        let byte = bytes[pos];
-        if let Some(active_quote) = quote {
-            if byte == b'\\' {
-                pos = (pos + 2).min(bytes.len());
-                continue;
-            }
-            if byte == active_quote {
-                quote = None;
-            }
-            pos += 1;
-            continue;
-        }
-
-        match byte {
-            b'\'' | b'"' => quote = Some(byte),
-            b'{' => depth += 1,
-            b'}' => {
-                depth = depth.checked_sub(1)?;
-                if depth == 0 {
-                    return Some(pos);
-                }
-            }
-            _ => {}
-        }
-        pos += 1;
-    }
-
-    None
-}
-
-fn strip_comments(input: &str) -> String {
-    let mut out = String::with_capacity(input.len());
-    let mut rest = input;
-
-    loop {
-        let Some(start) = rest.find("/*") else {
-            out.push_str(rest);
-            break;
-        };
-        out.push_str(&rest[..start]);
-
-        let after_start = &rest[start + 2..];
-        let Some(end) = after_start.find("*/") else {
-            break;
-        };
-        rest = &after_start[end + 2..];
-    }
-
-    out
 }
 
 const INHERITED_PROPERTIES: &[&str] = &[
@@ -481,7 +407,7 @@ mod tests {
 
     use crate::html;
 
-    use super::{cascade, parse_stylesheet};
+    use super::{cascade, parse_declarations, parse_stylesheet, Properties};
 
     #[test]
     fn parses_and_matches_descendant_selectors() {
@@ -541,5 +467,50 @@ mod tests {
     fn rejects_unsupported_combinators_instead_of_broadening_them() {
         let sheet = parse_stylesheet("div > p { color: red; } p { color: blue; }");
         assert_eq!(sheet.rules.len(), 1);
+    }
+
+    #[test]
+    fn rejects_entire_selector_when_one_descendant_part_is_unsupported() {
+        let sheet = parse_stylesheet(".card :hover { color: red; } .card { color: blue; }");
+        assert_eq!(sheet.rules.len(), 1);
+    }
+
+    #[test]
+    fn rejects_entire_selector_list_when_one_selector_is_unsupported() {
+        let sheet = parse_stylesheet("p, div > span { color: red; } p { color: blue; }");
+        assert_eq!(sheet.rules.len(), 1);
+    }
+
+    #[test]
+    fn declaration_parser_preserves_nested_colons_and_semicolons() {
+        let declarations = parse_declarations(
+            r#"background-image:url("data:image/svg+xml;utf8,<svg></svg>");content:"a:b;c";color:red ! IMPORTANT"#,
+        );
+        assert_eq!(declarations.len(), 3);
+        assert!(declarations[0].value.contains("data:image/svg+xml;utf8"));
+        assert_eq!(declarations[1].value, r#""a:b;c""#);
+        assert_eq!(declarations[2].value, "red");
+        assert!(declarations[2].important);
+    }
+
+    #[test]
+    fn comments_inside_css_strings_are_not_removed() {
+        let declarations = parse_declarations(r#"content:"/* keep */";color:red/* drop */"#);
+        assert_eq!(declarations.len(), 2);
+        assert_eq!(declarations[0].value, r#""/* keep */""#);
+        assert_eq!(declarations[1].value, "red");
+    }
+
+    #[test]
+    fn custom_property_names_preserve_case_and_inherit() {
+        let dom = html::parse(r#"<p style="--BrandColor: blue">x</p>"#);
+        let p = dom.find_first_tag("p").unwrap();
+        let mut inherited = Properties::new();
+        inherited.insert("--ThemeColor".to_string(), "red".to_string());
+
+        let style = cascade(&dom, p, &parse_stylesheet(""), &inherited);
+        assert_eq!(style.get("--ThemeColor").map(String::as_str), Some("red"));
+        assert_eq!(style.get("--BrandColor").map(String::as_str), Some("blue"));
+        assert!(!style.contains_key("--brandcolor"));
     }
 }
