@@ -8,6 +8,7 @@ use reqwest::{
 };
 
 const MAX_DOCUMENT_BYTES: usize = 8 * 1024 * 1024;
+const MAX_STYLESHEET_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct FetchResponse {
@@ -45,9 +46,21 @@ pub fn resolve_url(base: &str, target: &str) -> Result<String, String> {
 }
 
 pub fn fetch(url: &str) -> Result<FetchResponse, String> {
+    fetch_with_limit(
+        url,
+        "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
+        MAX_DOCUMENT_BYTES,
+    )
+}
+
+pub fn fetch_stylesheet(url: &str) -> Result<FetchResponse, String> {
+    fetch_with_limit(url, "text/css,*/*;q=0.1", MAX_STYLESHEET_BYTES)
+}
+
+fn fetch_with_limit(url: &str, accept: &str, max_bytes: usize) -> Result<FetchResponse, String> {
     let normalized = normalize_url(url)?;
     let client = Client::builder()
-        .user_agent("CherryBrowser/0.1 (+https://github.com/paddman/CherryBrowser)")
+        .user_agent("CherryBrowser/0.2 (+https://github.com/paddman/CherryBrowser)")
         .timeout(Duration::from_secs(25))
         .connect_timeout(Duration::from_secs(10))
         .redirect(Policy::limited(10))
@@ -56,21 +69,18 @@ pub fn fetch(url: &str) -> Result<FetchResponse, String> {
 
     let response = client
         .get(&normalized)
-        .header(
-            ACCEPT,
-            "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
-        )
+        .header(ACCEPT, accept)
         .header(ACCEPT_LANGUAGE, "th,en-US;q=0.9,en;q=0.8")
         .send()
         .map_err(|error| format!("network error: {error}"))?;
 
     if response
         .content_length()
-        .is_some_and(|length| length > MAX_DOCUMENT_BYTES as u64)
+        .is_some_and(|length| length > max_bytes as u64)
     {
         return Err(format!(
-            "document is larger than the current {} MiB safety limit",
-            MAX_DOCUMENT_BYTES / 1024 / 1024
+            "resource is larger than the current {} MiB safety limit",
+            max_bytes / 1024 / 1024
         ));
     }
 
@@ -87,10 +97,10 @@ pub fn fetch(url: &str) -> Result<FetchResponse, String> {
     let bytes = response
         .bytes()
         .map_err(|error| format!("failed reading response body: {error}"))?;
-    if bytes.len() > MAX_DOCUMENT_BYTES {
+    if bytes.len() > max_bytes {
         return Err(format!(
-            "document exceeded the current {} MiB safety limit",
-            MAX_DOCUMENT_BYTES / 1024 / 1024
+            "resource exceeded the current {} MiB safety limit",
+            max_bytes / 1024 / 1024
         ));
     }
 
