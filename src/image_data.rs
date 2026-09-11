@@ -35,8 +35,16 @@ pub fn decode(bytes: &[u8]) -> Result<DecodedImage, String> {
     let decoded = reader
         .decode()
         .map_err(|error| format!("image decode failed: {error}"))?;
+    let (width, height) = (decoded.width(), decoded.height());
+    let rgba_bytes = rgba_allocation_bytes(width, height)
+        .ok_or_else(|| "image dimensions overflow the RGBA allocation calculation".to_string())?;
+    if rgba_bytes > MAX_DECODE_ALLOC {
+        return Err(format!(
+            "decoded RGBA image would require {rgba_bytes} bytes, above the {MAX_DECODE_ALLOC}-byte safety limit"
+        ));
+    }
+
     let rgba = decoded.to_rgba8();
-    let (width, height) = rgba.dimensions();
 
     Ok(DecodedImage {
         width,
@@ -45,9 +53,15 @@ pub fn decode(bytes: &[u8]) -> Result<DecodedImage, String> {
     })
 }
 
+fn rgba_allocation_bytes(width: u32, height: u32) -> Option<u64> {
+    u64::from(width)
+        .checked_mul(u64::from(height))
+        .and_then(|pixels| pixels.checked_mul(4))
+}
+
 #[cfg(test)]
 mod tests {
-    use super::decode;
+    use super::{MAX_DECODE_ALLOC, decode, rgba_allocation_bytes};
 
     const TWO_BY_ONE_PNG: &[u8] = &[
         0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44,
@@ -68,5 +82,11 @@ mod tests {
     #[test]
     fn rejects_unknown_binary_data() {
         assert!(decode(b"this is not an image").is_err());
+    }
+
+    #[test]
+    fn rgba_budget_rejects_max_dimensions() {
+        let bytes = rgba_allocation_bytes(8192, 8192).unwrap();
+        assert!(bytes > MAX_DECODE_ALLOC);
     }
 }
