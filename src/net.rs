@@ -1,4 +1,4 @@
-use std::{sync::OnceLock, time::Duration};
+use std::{io::Read, sync::OnceLock, time::Duration};
 
 use reqwest::{
     Url,
@@ -115,7 +115,7 @@ fn fetch_bytes_with_limit(
     max_bytes: usize,
 ) -> Result<BinaryFetchResponse, String> {
     let normalized = normalize_url(url)?;
-    let response = http_client()?
+    let mut response = http_client()?
         .get(&normalized)
         .header(ACCEPT, accept)
         .header(ACCEPT_LANGUAGE, "th,en-US;q=0.9,en;q=0.8")
@@ -141,10 +141,24 @@ fn fetch_bytes_with_limit(
         .and_then(|value| value.to_str().ok())
         .unwrap_or("application/octet-stream")
         .to_string();
+    let body = read_body_with_limit(&mut response, max_bytes)?;
 
-    let bytes = response
-        .bytes()
+    Ok(BinaryFetchResponse {
+        requested_url,
+        final_url,
+        status,
+        content_type,
+        body,
+    })
+}
+
+fn read_body_with_limit(reader: &mut impl Read, max_bytes: usize) -> Result<Vec<u8>, String> {
+    let mut bytes = Vec::with_capacity(max_bytes.min(64 * 1024));
+    reader
+        .take(max_bytes as u64 + 1)
+        .read_to_end(&mut bytes)
         .map_err(|error| format!("failed reading response body: {error}"))?;
+
     if bytes.len() > max_bytes {
         return Err(format!(
             "resource exceeded the current {} MiB safety limit",
@@ -152,18 +166,14 @@ fn fetch_bytes_with_limit(
         ));
     }
 
-    Ok(BinaryFetchResponse {
-        requested_url,
-        final_url,
-        status,
-        content_type,
-        body: bytes.to_vec(),
-    })
+    Ok(bytes)
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_url, resolve_url};
+    use std::io::Cursor;
+
+    use super::{normalize_url, read_body_with_limit, resolve_url};
 
     #[test]
     fn normalizes_bare_hosts() {
@@ -184,5 +194,19 @@ mod tests {
     #[test]
     fn rejects_non_web_schemes() {
         assert!(normalize_url("file:///etc/passwd").is_err());
+    }
+
+    #[test]
+    fn stops_streaming_after_resource_limit() {
+        let mut reader = Cursor::new(vec![7_u8; 33]);
+        let error = read_body_with_limit(&mut reader, 32).unwrap_err();
+        assert!(error.contains("resource exceeded"));
+        assert_eq!(reader.position(), 33);
+    }
+
+    #[test]
+    fn returns_bounded_stream_body() {
+        let mut reader = Cursor::new(b"cherry".to_vec());
+        assert_eq!(read_body_with_limit(&mut reader, 32).unwrap(), b"cherry");
     }
 }
