@@ -4,6 +4,7 @@ use crate::{
     css::{self, Properties, Stylesheet},
     dom::{Dom, NodeId, NodeKind},
     image_data::DecodedImage,
+    text_layout,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -356,10 +357,26 @@ impl<'a> Flow<'a> {
         }
 
         let space_width = measure_text(" ", style);
-        for word in text.split_whitespace() {
-            let width = measure_text(word, style).max(1.0);
-            if self.x + width > self.line_right && self.x > self.line_left {
+        let mut pending_space = false;
+        for unit in text_layout::line_break_units(text) {
+            if unit.is_space {
+                pending_space = self.x > self.line_left;
+                continue;
+            }
+
+            let width = measure_text(&unit.text, style).max(1.0);
+            let gap = if pending_space && self.x > self.line_left {
+                space_width
+            } else {
+                0.0
+            };
+
+            if self.x + gap + width > self.line_right && self.x > self.line_left {
                 self.line_break(style.line_height);
+                pending_space = false;
+            } else {
+                self.x += gap;
+                pending_space = false;
             }
 
             let height = style.line_height.max(style.font_size);
@@ -370,7 +387,7 @@ impl<'a> Flow<'a> {
                     width,
                     height,
                 },
-                text: word.to_string(),
+                text: unit.text,
                 font_size: style.font_size,
                 color: style.color,
                 bold: style.bold,
@@ -380,7 +397,7 @@ impl<'a> Flow<'a> {
                 href: href.map(ToOwned::to_owned),
             }));
 
-            self.x += width + space_width;
+            self.x += width;
             self.line_height = self.line_height.max(height);
         }
     }
@@ -680,8 +697,7 @@ fn heading(style: &mut ComputedStyle, scale: f32, margin_em: f32) {
 }
 
 fn measure_text(text: &str, style: &ComputedStyle) -> f32 {
-    let factor = if style.monospace { 0.62 } else { 0.54 };
-    text.chars().count() as f32 * style.font_size * factor
+    text_layout::estimated_text_width(text, style.font_size, style.monospace)
 }
 
 fn parse_edges(value: &str, font_size: f32, reference: f32) -> Edges {
@@ -887,5 +903,30 @@ mod tests {
                 .iter()
                 .any(|item| matches!(item, PaintItem::Image(image) if image.node == image_node))
         );
+    }
+
+    #[test]
+    fn wraps_long_thai_text_without_ascii_spaces() {
+        let dom = html::parse(
+            "<p>ภาษาไทยทดสอบการตัดบรรทัดโดยไม่มีช่องว่างภาษาไทยทดสอบการตัดบรรทัดโดยไม่มีช่องว่าง</p>",
+        );
+        let sheet = css::parse_stylesheet("");
+        let doc = layout_document(&dom, &sheet, 320.0);
+        let ys = doc
+            .items
+            .iter()
+            .filter_map(|item| match item {
+                PaintItem::Text(text) if text.text.chars().any(|ch| matches!(ch as u32, 0x0e00..=0x0e7f)) => {
+                    Some(text.rect.y)
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>();
+
+        assert!(ys.len() > 3);
+        assert!(ys.iter().any(|y| *y > ys[0] + 1.0));
+        assert!(!doc.items.iter().any(
+            |item| matches!(item, PaintItem::Text(text) if text.text == "่" || text.text == "้")
+        ));
     }
 }
