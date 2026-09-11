@@ -5,12 +5,14 @@ use std::{
 };
 
 use crate::{
-    dom::Dom,
-    html,
+    dom::{Dom, NodeId},
+    html, image_data,
+    image_data::DecodedImage,
     net::{self, FetchResponse},
 };
 
 const MAX_EXTERNAL_STYLESHEETS: usize = 24;
+const MAX_DOCUMENT_IMAGES: usize = 32;
 
 #[derive(Debug, Clone)]
 pub struct LoadedDocument {
@@ -19,6 +21,7 @@ pub struct LoadedDocument {
     pub base_url: String,
     pub stylesheet_source: String,
     pub external_stylesheets: usize,
+    pub images: HashMap<NodeId, DecodedImage>,
     pub resource_warnings: Vec<String>,
 }
 
@@ -32,6 +35,7 @@ pub fn load(url: &str) -> Result<LoadedDocument, String> {
             base_url: final_url,
             stylesheet_source: String::new(),
             external_stylesheets: 0,
+            images: HashMap::new(),
             resource_warnings: Vec::new(),
         });
     }
@@ -39,9 +43,14 @@ pub fn load(url: &str) -> Result<LoadedDocument, String> {
     let dom = html::parse(&response.body);
     let base_url = document_base_url(&dom, &final_url);
     let mut resource_warnings = Vec::new();
-    let links = stylesheet_links(&dom, &base_url, &mut resource_warnings);
-    let (external, fetch_warnings) = fetch_stylesheets_parallel(&links);
-    resource_warnings.extend(fetch_warnings);
+
+    let stylesheet_urls = stylesheet_links(&dom, &base_url, &mut resource_warnings);
+    let image_urls = image_links(&dom, &base_url, &mut resource_warnings);
+
+    let (external, stylesheet_warnings) = fetch_stylesheets_parallel(&stylesheet_urls);
+    let (images, image_warnings) = fetch_images_parallel(&image_urls);
+    resource_warnings.extend(stylesheet_warnings);
+    resource_warnings.extend(image_warnings);
 
     let stylesheet_source = compose_stylesheet_source(&dom, &base_url, &external);
 
@@ -51,6 +60,7 @@ pub fn load(url: &str) -> Result<LoadedDocument, String> {
         base_url,
         stylesheet_source,
         external_stylesheets: external.len(),
+        images,
         resource_warnings,
     })
 }
@@ -100,6 +110,40 @@ fn stylesheet_links(dom: &Dom, base_url: &str, warnings: &mut Vec<String>) -> Ve
                 }
             }
             Err(error) => warnings.push(format!("stylesheet URL rejected: {error}")),
+        }
+    }
+
+    links
+}
+
+fn image_links(
+    dom: &Dom,
+    base_url: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<(NodeId, String)> {
+    let mut links = Vec::new();
+
+    for (id, _) in dom.nodes().iter().enumerate() {
+        if dom.tag_name(id) != Some("img") {
+            continue;
+        }
+        let Some(src) = dom.attr(id, "src") else {
+            continue;
+        };
+        if src.trim().is_empty() {
+            continue;
+        }
+
+        if links.len() >= MAX_DOCUMENT_IMAGES {
+            warnings.push(format!(
+                "image limit reached; ignoring resources after {MAX_DOCUMENT_IMAGES} images"
+            ));
+            break;
+        }
+
+        match net::resolve_url(base_url, src) {
+            Ok(url) => links.push((id, url)),
+            Err(error) => warnings.push(format!("image URL rejected: {error}")),
         }
     }
 
@@ -170,6 +214,44 @@ fn fetch_stylesheets_parallel(urls: &[String]) -> (HashMap<String, String>, Vec<
     (loaded, warnings)
 }
 
+fn fetch_images_parallel(
+    urls: &[(NodeId, String)],
+) -> (HashMap<NodeId, DecodedImage>, Vec<String>) {
+    let (sender, receiver) = mpsc::channel();
+
+    thread::scope(|scope| {
+        for (node, url) in urls {
+            let sender = sender.clone();
+            let node = *node;
+            let url = url.clone();
+            scope.spawn(move || {
+                let result = net::fetch_image(&url).and_then(|response| {
+                    if !(200..300).contains(&response.status) {
+                        return Err(format!("HTTP {}", response.status));
+                    }
+                    image_data::decode(&response.body)
+                });
+                let _ = sender.send((node, url, result));
+            });
+        }
+        drop(sender);
+    });
+
+    let mut loaded = HashMap::new();
+    let mut warnings = Vec::new();
+
+    for (node, url, result) in receiver {
+        match result {
+            Ok(image) => {
+                loaded.insert(node, image);
+            }
+            Err(error) => warnings.push(format!("image failed: {url}: {error}")),
+        }
+    }
+
+    (loaded, warnings)
+}
+
 fn compose_stylesheet_source(
     dom: &Dom,
     base_url: &str,
@@ -208,7 +290,7 @@ mod tests {
 
     use crate::html;
 
-    use super::{compose_stylesheet_source, document_base_url, stylesheet_links};
+    use super::{compose_stylesheet_source, document_base_url, image_links, stylesheet_links};
 
     #[test]
     fn base_href_changes_resource_resolution() {
@@ -221,6 +303,20 @@ mod tests {
         let mut warnings = Vec::new();
         let links = stylesheet_links(&dom, &base, &mut warnings);
         assert_eq!(links, vec!["https://cdn.example/assets/app.css"]);
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn resolves_image_urls_against_document_base() {
+        let dom = html::parse(
+            r#"<base href="https://img.example/static/"><img src="hero.png"><img src="icons/a.webp">"#,
+        );
+        let base = document_base_url(&dom, "https://example.com/");
+        let mut warnings = Vec::new();
+        let links = image_links(&dom, &base, &mut warnings);
+        assert_eq!(links.len(), 2);
+        assert_eq!(links[0].1, "https://img.example/static/hero.png");
+        assert_eq!(links[1].1, "https://img.example/static/icons/a.webp");
         assert!(warnings.is_empty());
     }
 
