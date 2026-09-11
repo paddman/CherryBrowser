@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    cancel::CancellationToken,
     dom::{Dom, NodeId},
     html, image_data,
     image_data::DecodedImage,
@@ -27,7 +28,12 @@ pub struct LoadedDocument {
 }
 
 pub fn load(url: &str) -> Result<LoadedDocument, String> {
-    let response = net::fetch(url)?;
+    load_with_cancel(url, &CancellationToken::new())
+}
+
+pub fn load_with_cancel(url: &str, cancel: &CancellationToken) -> Result<LoadedDocument, String> {
+    let response = net::fetch_with_cancel(url, cancel)?;
+    cancel.check()?;
     let final_url = response.final_url.clone();
     if !is_html(&response.content_type) {
         return Ok(LoadedDocument {
@@ -42,14 +48,17 @@ pub fn load(url: &str) -> Result<LoadedDocument, String> {
     }
 
     let dom = html::parse(&response.body);
+    cancel.check()?;
     let base_url = document_base_url(&dom, &final_url);
     let mut resource_warnings = Vec::new();
 
     let stylesheet_urls = stylesheet_links(&dom, &base_url, &mut resource_warnings);
     let image_urls = image_links(&dom, &base_url, &mut resource_warnings);
 
-    let (external, stylesheet_warnings) = fetch_stylesheets_parallel(&stylesheet_urls);
-    let (images, image_warnings) = fetch_images_parallel(&image_urls);
+    let (external, stylesheet_warnings) = fetch_stylesheets_parallel(&stylesheet_urls, cancel);
+    cancel.check()?;
+    let (images, image_warnings) = fetch_images_parallel(&image_urls, cancel);
+    cancel.check()?;
     resource_warnings.extend(stylesheet_warnings);
     resource_warnings.extend(image_warnings);
 
@@ -177,19 +186,26 @@ fn is_stylesheet_link(dom: &Dom, id: usize) -> bool {
     }
 }
 
-fn fetch_stylesheets_parallel(urls: &[String]) -> (HashMap<String, String>, Vec<String>) {
+fn fetch_stylesheets_parallel(
+    urls: &[String],
+    cancel: &CancellationToken,
+) -> (HashMap<String, String>, Vec<String>) {
     let mut loaded = HashMap::new();
     let mut warnings = Vec::new();
 
     for chunk in urls.chunks(MAX_RESOURCE_WORKERS) {
+        if cancel.is_cancelled() {
+            break;
+        }
         let (sender, receiver) = mpsc::channel();
 
         thread::scope(|scope| {
             for url in chunk {
                 let sender = sender.clone();
                 let url = url.clone();
+                let cancel = cancel.clone();
                 scope.spawn(move || {
-                    let result = net::fetch_stylesheet(&url);
+                    let result = net::fetch_stylesheet_with_cancel(&url, &cancel);
                     let _ = sender.send((url, result));
                 });
             }
@@ -205,6 +221,7 @@ fn fetch_stylesheets_parallel(urls: &[String]) -> (HashMap<String, String>, Vec<
                     "stylesheet returned HTTP {}: {}",
                     response.status, requested_url
                 )),
+                Err(error) if error == "navigation cancelled" => {}
                 Err(error) => warnings.push(format!("stylesheet failed: {requested_url}: {error}")),
             }
         }
@@ -215,12 +232,16 @@ fn fetch_stylesheets_parallel(urls: &[String]) -> (HashMap<String, String>, Vec<
 
 fn fetch_images_parallel(
     urls: &[(NodeId, String)],
+    cancel: &CancellationToken,
 ) -> (HashMap<NodeId, DecodedImage>, Vec<String>) {
     let jobs = group_image_jobs(urls);
     let mut loaded = HashMap::new();
     let mut warnings = Vec::new();
 
     for chunk in jobs.chunks(MAX_RESOURCE_WORKERS) {
+        if cancel.is_cancelled() {
+            break;
+        }
         let (sender, receiver) = mpsc::channel();
 
         thread::scope(|scope| {
@@ -228,12 +249,16 @@ fn fetch_images_parallel(
                 let sender = sender.clone();
                 let url = url.clone();
                 let nodes = nodes.clone();
+                let cancel = cancel.clone();
                 scope.spawn(move || {
-                    let result = net::fetch_image(&url).and_then(|response| {
+                    let result = net::fetch_image_with_cancel(&url, &cancel).and_then(|response| {
                         if !(200..300).contains(&response.status) {
                             return Err(format!("HTTP {}", response.status));
                         }
-                        image_data::decode(&response.body)
+                        cancel.check()?;
+                        let image = image_data::decode(&response.body)?;
+                        cancel.check()?;
+                        Ok(image)
                     });
                     let _ = sender.send((nodes, url, result));
                 });
@@ -248,6 +273,7 @@ fn fetch_images_parallel(
                         loaded.insert(node, image.clone());
                     }
                 }
+                Err(error) if error == "navigation cancelled" => {}
                 Err(error) => warnings.push(format!("image failed: {url}: {error}")),
             }
         }
