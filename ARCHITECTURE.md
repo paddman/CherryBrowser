@@ -5,7 +5,7 @@
 CherryBrowser owns the web-platform-facing engine layers:
 
 - HTML parsing and DOM construction
-- CSS parsing, selector matching and cascade
+- CSS syntax scanning, parsing, selector matching and cascade
 - document/resource orchestration and web URL policy
 - web text decoding policy
 - navigation cancellation policy
@@ -22,7 +22,7 @@ Generic infrastructure libraries are allowed for TLS, HTTP framing, cryptography
 
 The engine must not embed or delegate page semantics to Chromium/Blink, WebKit, Firefox/Gecko, CEF, Electron, a system WebView, or another browser renderer.
 
-## Current 0.3.1 pipeline
+## Current 0.3.2 pipeline
 
 ```text
                        +-------------------------+
@@ -62,33 +62,40 @@ URL ------------------>| Cherry network policy   |
        ordered CSS source                        bounded image decoder
                 |                                   PNG/JPEG/WebP
                 |                                            |
-                +------------------+   +---------------------+
-                                   |   |
-                                   v   v
-                            +----------------+
-                            | Cherry DOM     |
-                            +-------+--------+
-                                    |
-                                    v
-                            +----------------+
-                            | CSS cascade    |
-                            +-------+--------+
-                                    |
-                                    v
-                            +----------------+
-                            | Cherry layout  |
-                            +-------+--------+
-                                    |
-                                    v
-                            +----------------+
-                            | display list   |
-                            +-------+--------+
-                                    |
-                                    v
-                            +----------------+
-                            | native painter |
-                            | + texture cache|
-                            +----------------+
+                v                                            |
+      +----------------------+                                |
+      | CSS syntax scanner   |                                |
+      | strings/functions/   |                                |
+      | nesting/top-level    |                                |
+      +----------+-----------+                                |
+                 |                                            |
+                 +------------------+   +---------------------+
+                                    |   |
+                                    v   v
+                             +----------------+
+                             | Cherry DOM     |
+                             +-------+--------+
+                                     |
+                                     v
+                             +----------------+
+                             | CSS cascade    |
+                             +-------+--------+
+                                     |
+                                     v
+                             +----------------+
+                             | Cherry layout  |
+                             +-------+--------+
+                                     |
+                                     v
+                             +----------------+
+                             | display list   |
+                             +-------+--------+
+                                     |
+                                     v
+                             +----------------+
+                             | native painter |
+                             | + texture cache|
+                             +----------------+
 ```
 
 The DOM is parsed once per HTML navigation and is reused for resource discovery, style, layout, and link resolution. `<base href>` is carried as page state so resource URLs and clicked relative links resolve consistently.
@@ -97,13 +104,15 @@ Navigation owns a cooperative cancellation token. Starting a newer navigation ca
 
 Text responses no longer assume UTF-8 unconditionally. The current decoder gives BOM precedence, then HTTP `charset`, then the first 1024 bytes of HTML for `<meta charset>`/charset declarations. Initial legacy support includes web-compatible Windows-1252 labels and Windows-874/TIS-620 for Thai pages. Valid undeclared UTF-8 is preserved; malformed undeclared input currently falls back to Windows-1252.
 
+CSS declaration parsing no longer uses raw `split(';')` / `split_once(':')`. `css_syntax.rs` tracks quoted strings, escapes, parentheses, brackets and nested braces so delimiters are recognized only at top level. Comment removal is quote-aware. `!important` is recognized only as a trailing top-level priority marker. Unsupported selector components invalidate their containing selector, and an invalid selector-list member invalidates the rule rather than broadening the match. Custom property names preserve case and inherited custom properties are carried through the style map. This is still not a standards-complete CSS tokenizer: escape decoding, the complete identifier grammar, modern selector syntax, `var()` substitution, origins/layers and many value grammars remain future work.
+
 The image codec only converts bounded PNG/JPEG/WebP bytes into RGBA pixels. Cherry code decides which `<img>` resources exist, resolves URLs, deduplicates repeated image URLs, enforces fetch budgets, chooses layout geometry, emits image paint items, owns texture identity, and checks final RGBA allocation size.
 
 The egui/Glow layer is still a temporary native presentation shell. DOM/CSS semantics, layout coordinates, display-list items and hit regions are generated by Cherry code, so the shell can later be replaced by a dedicated wgpu/Vulkan/Metal/D3D compositor without replacing the browser engine.
 
 ## Current isolation and safety budgets
 
-Milestone 0.3.1 remains single-process, so untrusted web content is bounded aggressively:
+Milestone 0.3.2 remains single-process, so untrusted web content is bounded aggressively:
 
 - documents: 8 MiB
 - external CSS: 2 MiB each, maximum 24
@@ -121,12 +130,9 @@ These limits are not a replacement for renderer sandboxing. They reduce accident
 
 ## Compatibility work before JavaScript
 
-The next engine work should improve deterministic parsing/layout behavior before introducing a scripting runtime:
+The next engine work should improve deterministic layout and browser security behavior before introducing a scripting runtime:
 
 ```text
-CSS tokenizer / declaration parser
-              |
-              v
 Unicode line breaking + shaping
               |
               v
