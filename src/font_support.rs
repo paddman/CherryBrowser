@@ -35,7 +35,10 @@ pub(crate) fn install_system_fallbacks(ctx: &egui::Context) -> Vec<PathBuf> {
             continue;
         };
         let size = metadata.len();
-        if size == 0 || size > MAX_FONT_BYTES || total_bytes.saturating_add(size) > MAX_TOTAL_FONT_BYTES {
+        if size == 0
+            || size > MAX_FONT_BYTES
+            || total_bytes.saturating_add(size) > MAX_TOTAL_FONT_BYTES
+        {
             continue;
         }
 
