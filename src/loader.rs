@@ -31,10 +31,7 @@ pub fn load(url: &str) -> Result<LoadedDocument, String> {
     load_with_cancel(url, &CancellationToken::new())
 }
 
-pub fn load_with_cancel(
-    url: &str,
-    cancel: &CancellationToken,
-) -> Result<LoadedDocument, String> {
+pub fn load_with_cancel(url: &str, cancel: &CancellationToken) -> Result<LoadedDocument, String> {
     let response = net::fetch_with_cancel(url, cancel)?;
     cancel.check()?;
     let final_url = response.final_url.clone();
