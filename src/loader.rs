@@ -116,11 +116,7 @@ fn stylesheet_links(dom: &Dom, base_url: &str, warnings: &mut Vec<String>) -> Ve
     links
 }
 
-fn image_links(
-    dom: &Dom,
-    base_url: &str,
-    warnings: &mut Vec<String>,
-) -> Vec<(NodeId, String)> {
+fn image_links(dom: &Dom, base_url: &str, warnings: &mut Vec<String>) -> Vec<(NodeId, String)> {
     let mut links = Vec::new();
 
     for (id, _) in dom.nodes().iter().enumerate() {

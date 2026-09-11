@@ -882,8 +882,10 @@ mod tests {
         );
 
         let doc = layout_document_with_images(&dom, &sheet, &images, 800.0);
-        assert!(doc.items.iter().any(
-            |item| matches!(item, PaintItem::Image(image) if image.node == image_node)
-        ));
+        assert!(
+            doc.items
+                .iter()
+                .any(|item| matches!(item, PaintItem::Image(image) if image.node == image_node))
+        );
     }
 }

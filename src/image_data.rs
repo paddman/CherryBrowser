@@ -17,7 +17,10 @@ pub fn decode(bytes: &[u8]) -> Result<DecodedImage, String> {
     let format = image::guess_format(bytes)
         .map_err(|error| format!("unable to identify image format: {error}"))?;
 
-    if !matches!(format, ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::WebP) {
+    if !matches!(
+        format,
+        ImageFormat::Png | ImageFormat::Jpeg | ImageFormat::WebP
+    ) {
         return Err(format!("image format {format:?} is not enabled yet"));
     }
 

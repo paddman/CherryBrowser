@@ -360,12 +360,8 @@ impl eframe::App for CherryApp {
                     page.layout_width = width;
                 }
 
-                let outcome = renderer::show_document(
-                    ui,
-                    &page.layout,
-                    &page.images,
-                    &mut page.textures,
-                );
+                let outcome =
+                    renderer::show_document(ui, &page.layout, &page.images, &mut page.textures);
                 clicked_href = outcome.clicked_href;
                 hovered_href = outcome.hovered_href;
             } else if let Some(error) = &self.last_error {
