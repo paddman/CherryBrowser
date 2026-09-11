@@ -205,9 +205,7 @@ fn fetch_stylesheets_parallel(urls: &[String]) -> (HashMap<String, String>, Vec<
                     "stylesheet returned HTTP {}: {}",
                     response.status, requested_url
                 )),
-                Err(error) => {
-                    warnings.push(format!("stylesheet failed: {requested_url}: {error}"))
-                }
+                Err(error) => warnings.push(format!("stylesheet failed: {requested_url}: {error}")),
             }
         }
     }
