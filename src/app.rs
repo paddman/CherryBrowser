@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     sync::mpsc::{self, Receiver, TryRecvError},
     thread,
     time::Duration,
@@ -8,8 +9,9 @@ use eframe::egui;
 
 use crate::{
     css::{self, Stylesheet},
-    dom::Dom,
+    dom::{Dom, NodeId},
     html,
+    image_data::DecodedImage,
     layout::{self, LayoutDocument},
     loader::{self, LoadedDocument},
     net, renderer,
@@ -33,6 +35,8 @@ struct Page {
     status_code: u16,
     dom: Dom,
     stylesheet: Stylesheet,
+    images: HashMap<NodeId, DecodedImage>,
+    textures: HashMap<NodeId, egui::TextureHandle>,
     layout: LayoutDocument,
     layout_width: f32,
 }
@@ -126,6 +130,7 @@ impl CherryApp {
             base_url,
             stylesheet_source,
             external_stylesheets,
+            images,
             resource_warnings,
         } = loaded;
 
@@ -148,21 +153,23 @@ impl CherryApp {
         let stylesheet = css::parse_stylesheet(&stylesheet_source);
         let title = document_title(&dom).unwrap_or_else(|| response.final_url.clone());
         let layout_width = 1000.0;
-        let layout = layout::layout_document(&dom, &stylesheet, layout_width);
+        let layout = layout::layout_document_with_images(&dom, &stylesheet, &images, layout_width);
+        let image_count = images.len();
 
         self.current_url = response.final_url.clone();
         self.url_input = response.final_url.clone();
         self.status = if resource_warnings.is_empty() {
             format!(
-                "HTTP {} · {} · CSS {} · Cherry Engine",
-                response.status, response.content_type, external_stylesheets
+                "HTTP {} · {} · CSS {} · IMG {} · Cherry Engine",
+                response.status, response.content_type, external_stylesheets, image_count
             )
         } else {
             format!(
-                "HTTP {} · {} · CSS {} · {} resource warning(s)",
+                "HTTP {} · {} · CSS {} · IMG {} · {} resource warning(s)",
                 response.status,
                 response.content_type,
                 external_stylesheets,
+                image_count,
                 resource_warnings.len()
             )
         };
@@ -179,6 +186,8 @@ impl CherryApp {
             status_code: response.status,
             dom,
             stylesheet,
+            images,
+            textures: HashMap::new(),
             layout,
             layout_width,
         });
@@ -342,11 +351,21 @@ impl eframe::App for CherryApp {
             if let Some(page) = self.page.as_mut() {
                 let width = ui.available_width().max(320.0);
                 if (page.layout_width - width).abs() > 1.0 {
-                    page.layout = layout::layout_document(&page.dom, &page.stylesheet, width);
+                    page.layout = layout::layout_document_with_images(
+                        &page.dom,
+                        &page.stylesheet,
+                        &page.images,
+                        width,
+                    );
                     page.layout_width = width;
                 }
 
-                let outcome = renderer::show_document(ui, &page.layout);
+                let outcome = renderer::show_document(
+                    ui,
+                    &page.layout,
+                    &page.images,
+                    &mut page.textures,
+                );
                 clicked_href = outcome.clicked_href;
                 hovered_href = outcome.hovered_href;
             } else if let Some(error) = &self.last_error {
