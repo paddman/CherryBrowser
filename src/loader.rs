@@ -13,6 +13,7 @@ use crate::{
 
 const MAX_EXTERNAL_STYLESHEETS: usize = 24;
 const MAX_DOCUMENT_IMAGES: usize = 32;
+const MAX_RESOURCE_WORKERS: usize = 6;
 
 #[derive(Debug, Clone)]
 pub struct LoadedDocument {
@@ -177,33 +178,37 @@ fn is_stylesheet_link(dom: &Dom, id: usize) -> bool {
 }
 
 fn fetch_stylesheets_parallel(urls: &[String]) -> (HashMap<String, String>, Vec<String>) {
-    let (sender, receiver) = mpsc::channel();
-
-    thread::scope(|scope| {
-        for url in urls {
-            let sender = sender.clone();
-            let url = url.clone();
-            scope.spawn(move || {
-                let result = net::fetch_stylesheet(&url);
-                let _ = sender.send((url, result));
-            });
-        }
-        drop(sender);
-    });
-
     let mut loaded = HashMap::new();
     let mut warnings = Vec::new();
 
-    for (requested_url, result) in receiver {
-        match result {
-            Ok(response) if (200..300).contains(&response.status) => {
-                loaded.insert(requested_url, response.body);
+    for chunk in urls.chunks(MAX_RESOURCE_WORKERS) {
+        let (sender, receiver) = mpsc::channel();
+
+        thread::scope(|scope| {
+            for url in chunk {
+                let sender = sender.clone();
+                let url = url.clone();
+                scope.spawn(move || {
+                    let result = net::fetch_stylesheet(&url);
+                    let _ = sender.send((url, result));
+                });
             }
-            Ok(response) => warnings.push(format!(
-                "stylesheet returned HTTP {}: {}",
-                response.status, requested_url
-            )),
-            Err(error) => warnings.push(format!("stylesheet failed: {requested_url}: {error}")),
+            drop(sender);
+        });
+
+        for (requested_url, result) in receiver {
+            match result {
+                Ok(response) if (200..300).contains(&response.status) => {
+                    loaded.insert(requested_url, response.body);
+                }
+                Ok(response) => warnings.push(format!(
+                    "stylesheet returned HTTP {}: {}",
+                    response.status, requested_url
+                )),
+                Err(error) => {
+                    warnings.push(format!("stylesheet failed: {requested_url}: {error}"))
+                }
+            }
         }
     }
 
@@ -213,39 +218,52 @@ fn fetch_stylesheets_parallel(urls: &[String]) -> (HashMap<String, String>, Vec<
 fn fetch_images_parallel(
     urls: &[(NodeId, String)],
 ) -> (HashMap<NodeId, DecodedImage>, Vec<String>) {
-    let (sender, receiver) = mpsc::channel();
-
-    thread::scope(|scope| {
-        for (node, url) in urls {
-            let sender = sender.clone();
-            let node = *node;
-            let url = url.clone();
-            scope.spawn(move || {
-                let result = net::fetch_image(&url).and_then(|response| {
-                    if !(200..300).contains(&response.status) {
-                        return Err(format!("HTTP {}", response.status));
-                    }
-                    image_data::decode(&response.body)
-                });
-                let _ = sender.send((node, url, result));
-            });
-        }
-        drop(sender);
-    });
-
+    let jobs = group_image_jobs(urls);
     let mut loaded = HashMap::new();
     let mut warnings = Vec::new();
 
-    for (node, url, result) in receiver {
-        match result {
-            Ok(image) => {
-                loaded.insert(node, image);
+    for chunk in jobs.chunks(MAX_RESOURCE_WORKERS) {
+        let (sender, receiver) = mpsc::channel();
+
+        thread::scope(|scope| {
+            for (url, nodes) in chunk {
+                let sender = sender.clone();
+                let url = url.clone();
+                let nodes = nodes.clone();
+                scope.spawn(move || {
+                    let result = net::fetch_image(&url).and_then(|response| {
+                        if !(200..300).contains(&response.status) {
+                            return Err(format!("HTTP {}", response.status));
+                        }
+                        image_data::decode(&response.body)
+                    });
+                    let _ = sender.send((nodes, url, result));
+                });
             }
-            Err(error) => warnings.push(format!("image failed: {url}: {error}")),
+            drop(sender);
+        });
+
+        for (nodes, url, result) in receiver {
+            match result {
+                Ok(image) => {
+                    for node in nodes {
+                        loaded.insert(node, image.clone());
+                    }
+                }
+                Err(error) => warnings.push(format!("image failed: {url}: {error}")),
+            }
         }
     }
 
     (loaded, warnings)
+}
+
+fn group_image_jobs(urls: &[(NodeId, String)]) -> Vec<(String, Vec<NodeId>)> {
+    let mut grouped = HashMap::<String, Vec<NodeId>>::new();
+    for (node, url) in urls {
+        grouped.entry(url.clone()).or_default().push(*node);
+    }
+    grouped.into_iter().collect()
 }
 
 fn compose_stylesheet_source(
@@ -286,7 +304,10 @@ mod tests {
 
     use crate::html;
 
-    use super::{compose_stylesheet_source, document_base_url, image_links, stylesheet_links};
+    use super::{
+        compose_stylesheet_source, document_base_url, group_image_jobs, image_links,
+        stylesheet_links,
+    };
 
     #[test]
     fn base_href_changes_resource_resolution() {
@@ -314,6 +335,24 @@ mod tests {
         assert_eq!(links[0].1, "https://img.example/static/hero.png");
         assert_eq!(links[1].1, "https://img.example/static/icons/a.webp");
         assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn groups_duplicate_image_urls_into_one_fetch_job() {
+        let jobs = group_image_jobs(&[
+            (1, "https://img.example/a.png".to_string()),
+            (2, "https://img.example/a.png".to_string()),
+            (3, "https://img.example/b.png".to_string()),
+        ]);
+        assert_eq!(jobs.len(), 2);
+
+        let shared = jobs
+            .iter()
+            .find(|(url, _)| url.ends_with("/a.png"))
+            .unwrap();
+        assert_eq!(shared.1.len(), 2);
+        assert!(shared.1.contains(&1));
+        assert!(shared.1.contains(&2));
     }
 
     #[test]
