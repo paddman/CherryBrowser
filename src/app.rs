@@ -12,8 +12,7 @@ use crate::{
     html,
     layout::{self, LayoutDocument},
     loader::{self, LoadedDocument},
-    net,
-    renderer,
+    net, renderer,
 };
 
 #[derive(Debug, Clone, Copy)]
