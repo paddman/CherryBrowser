@@ -21,6 +21,7 @@ use crate::{
 enum HistoryMode {
     Push,
     Preserve,
+    Traverse(usize),
 }
 
 struct PendingNavigation {
@@ -29,10 +30,8 @@ struct PendingNavigation {
 }
 
 struct Page {
-    url: String,
     base_url: String,
     title: String,
-    status_code: u16,
     dom: Dom,
     stylesheet: Stylesheet,
     images: HashMap<NodeId, DecodedImage>,
@@ -175,15 +174,15 @@ impl CherryApp {
         };
         self.last_error = None;
 
-        if matches!(history_mode, HistoryMode::Push) {
-            self.push_history(response.final_url.clone());
+        match history_mode {
+            HistoryMode::Push => self.push_history(response.final_url.clone()),
+            HistoryMode::Preserve => {}
+            HistoryMode::Traverse(pos) => self.history_pos = Some(pos),
         }
 
         self.page = Some(Page {
-            url: response.final_url,
             base_url,
             title,
-            status_code: response.status,
             dom,
             stylesheet,
             images,
@@ -214,8 +213,7 @@ impl CherryApp {
 
         let next_pos = pos - 1;
         let url = self.history[next_pos].clone();
-        self.history_pos = Some(next_pos);
-        self.navigate(&url, HistoryMode::Preserve);
+        self.navigate(&url, HistoryMode::Traverse(next_pos));
     }
 
     fn go_forward(&mut self) {
@@ -228,8 +226,7 @@ impl CherryApp {
 
         let next_pos = pos + 1;
         let url = self.history[next_pos].clone();
-        self.history_pos = Some(next_pos);
-        self.navigate(&url, HistoryMode::Preserve);
+        self.navigate(&url, HistoryMode::Traverse(next_pos));
     }
 
     fn reload(&mut self) {
@@ -329,6 +326,11 @@ impl eframe::App for CherryApp {
             .hovered_href
             .clone()
             .unwrap_or_else(|| self.status.clone());
+        let page_title = self
+            .page
+            .as_ref()
+            .map(|page| page.title.as_str())
+            .unwrap_or("CherryBrowser");
 
         egui::Panel::bottom("cherry_status")
             .exact_size(28.0)
@@ -339,7 +341,7 @@ impl eframe::App for CherryApp {
                     }
                     ui.small(footer_text);
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.small("Independent Rust browser engine");
+                        ui.small(page_title);
                     });
                 });
             });
