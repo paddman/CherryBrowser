@@ -64,10 +64,7 @@ pub fn fetch(url: &str) -> Result<FetchResponse, String> {
     fetch_with_cancel(url, &CancellationToken::new())
 }
 
-pub fn fetch_with_cancel(
-    url: &str,
-    cancel: &CancellationToken,
-) -> Result<FetchResponse, String> {
+pub fn fetch_with_cancel(url: &str, cancel: &CancellationToken) -> Result<FetchResponse, String> {
     fetch_text_with_limit(
         url,
         "text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.5",
