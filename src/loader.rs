@@ -15,6 +15,8 @@ const MAX_EXTERNAL_STYLESHEETS: usize = 24;
 #[derive(Debug, Clone)]
 pub struct LoadedDocument {
     pub response: FetchResponse,
+    pub dom: Option<Dom>,
+    pub base_url: String,
     pub stylesheet_source: String,
     pub external_stylesheets: usize,
     pub resource_warnings: Vec<String>,
@@ -22,9 +24,12 @@ pub struct LoadedDocument {
 
 pub fn load(url: &str) -> Result<LoadedDocument, String> {
     let response = net::fetch(url)?;
+    let final_url = response.final_url.clone();
     if !is_html(&response.content_type) {
         return Ok(LoadedDocument {
             response,
+            dom: None,
+            base_url: final_url,
             stylesheet_source: String::new(),
             external_stylesheets: 0,
             resource_warnings: Vec::new(),
@@ -32,7 +37,7 @@ pub fn load(url: &str) -> Result<LoadedDocument, String> {
     }
 
     let dom = html::parse(&response.body);
-    let base_url = document_base_url(&dom, &response.final_url);
+    let base_url = document_base_url(&dom, &final_url);
     let mut resource_warnings = Vec::new();
     let links = stylesheet_links(&dom, &base_url, &mut resource_warnings);
     let (external, fetch_warnings) = fetch_stylesheets_parallel(&links);
@@ -42,6 +47,8 @@ pub fn load(url: &str) -> Result<LoadedDocument, String> {
 
     Ok(LoadedDocument {
         response,
+        dom: Some(dom),
+        base_url,
         stylesheet_source,
         external_stylesheets: external.len(),
         resource_warnings,
