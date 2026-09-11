@@ -11,7 +11,8 @@ use crate::{
     dom::Dom,
     html,
     layout::{self, LayoutDocument},
-    net::{self, FetchResponse},
+    loader::{self, LoadedDocument},
+    net,
     renderer,
 };
 
@@ -22,7 +23,7 @@ enum HistoryMode {
 }
 
 struct PendingNavigation {
-    receiver: Receiver<Result<FetchResponse, String>>,
+    receiver: Receiver<Result<LoadedDocument, String>>,
     history_mode: HistoryMode,
 }
 
@@ -57,7 +58,7 @@ impl CherryApp {
             pending: None,
             history: Vec::new(),
             history_pos: None,
-            status: "Cherry Engine 0.1".to_string(),
+            status: "Cherry Engine 0.2".to_string(),
             hovered_href: None,
             last_error: None,
         };
@@ -81,7 +82,7 @@ impl CherryApp {
 
         let (sender, receiver) = mpsc::channel();
         thread::spawn(move || {
-            let result = net::fetch(&normalized);
+            let result = loader::load(&normalized);
             let _ = sender.send(result);
         });
 
@@ -110,7 +111,7 @@ impl CherryApp {
         self.pending = None;
 
         match result {
-            Ok(response) => self.install_response(response, history_mode),
+            Ok(loaded) => self.install_response(loaded, history_mode),
             Err(error) => {
                 self.status = format!("Load failed: {error}");
                 self.last_error = Some(error);
@@ -118,7 +119,8 @@ impl CherryApp {
         }
     }
 
-    fn install_response(&mut self, response: FetchResponse, history_mode: HistoryMode) {
+    fn install_response(&mut self, loaded: LoadedDocument, history_mode: HistoryMode) {
+        let response = loaded.response;
         let dom = if is_renderable_text(&response.content_type) {
             if response.content_type.to_ascii_lowercase().contains("html") {
                 html::parse(&response.body)
@@ -128,7 +130,7 @@ impl CherryApp {
             }
         } else {
             let message = format!(
-                "CherryBrowser milestone 0.1 cannot render content type {} yet.",
+                "CherryBrowser milestone 0.2 cannot render content type {} yet.",
                 response.content_type
             );
             html::parse(&format!(
@@ -137,17 +139,27 @@ impl CherryApp {
             ))
         };
 
-        let stylesheet = collect_embedded_styles(&dom);
+        let stylesheet = css::parse_stylesheet(&loaded.stylesheet_source);
         let title = document_title(&dom).unwrap_or_else(|| response.final_url.clone());
         let layout_width = 1000.0;
         let layout = layout::layout_document(&dom, &stylesheet, layout_width);
 
         self.current_url = response.final_url.clone();
         self.url_input = response.final_url.clone();
-        self.status = format!(
-            "HTTP {} · {} · Cherry Engine",
-            response.status, response.content_type
-        );
+        self.status = if loaded.resource_warnings.is_empty() {
+            format!(
+                "HTTP {} · {} · CSS {} · Cherry Engine",
+                response.status, response.content_type, loaded.external_stylesheets
+            )
+        } else {
+            format!(
+                "HTTP {} · {} · CSS {} · {} resource warning(s)",
+                response.status,
+                response.content_type,
+                loaded.external_stylesheets,
+                loaded.resource_warnings.len()
+            )
+        };
         self.last_error = None;
 
         if matches!(history_mode, HistoryMode::Push) {
@@ -360,17 +372,6 @@ impl eframe::App for CherryApp {
             self.open_href(&href);
         }
     }
-}
-
-fn collect_embedded_styles(dom: &Dom) -> Stylesheet {
-    let mut css_text = String::new();
-    for (id, _) in dom.nodes().iter().enumerate() {
-        if dom.tag_name(id) == Some("style") {
-            css_text.push_str(&dom.text_content(id));
-            css_text.push('\n');
-        }
-    }
-    css::parse_stylesheet(&css_text)
 }
 
 fn document_title(dom: &Dom) -> Option<String> {
