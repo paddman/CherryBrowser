@@ -32,7 +32,10 @@ pub(crate) fn line_break_units(text: &str) -> Vec<TextUnit> {
                 is_space: false,
             });
         } else {
-            let break_after = cluster.chars().last().is_some_and(is_soft_break_punctuation);
+            let break_after = cluster
+                .chars()
+                .last()
+                .is_some_and(is_soft_break_punctuation);
             buffered.push_str(&cluster);
             if break_after {
                 flush_buffer(&mut units, &mut buffered);
@@ -82,7 +85,9 @@ fn text_clusters(text: &str) -> Vec<String> {
             continue;
         }
 
-        if is_regional_indicator(first) && chars.get(pos).is_some_and(|ch| is_regional_indicator(*ch)) {
+        if is_regional_indicator(first)
+            && chars.get(pos).is_some_and(|ch| is_regional_indicator(*ch))
+        {
             cluster.push(chars[pos]);
             pos += 1;
         }
@@ -193,10 +198,9 @@ fn is_emoji(ch: char) -> bool {
 }
 
 fn is_breakable_cluster(cluster: &str) -> bool {
-    cluster
-        .chars()
-        .next()
-        .is_some_and(|ch| is_thai_char(ch) || is_cjk(ch) || is_emoji(ch) || is_regional_indicator(ch))
+    cluster.chars().next().is_some_and(|ch| {
+        is_thai_char(ch) || is_cjk(ch) || is_emoji(ch) || is_regional_indicator(ch)
+    })
 }
 
 fn is_soft_break_punctuation(ch: char) -> bool {
@@ -208,7 +212,10 @@ fn estimated_cluster_em(cluster: &str, monospace: bool) -> f32 {
         return if monospace { 0.62 } else { 0.33 };
     }
 
-    if cluster.contains('\u{200d}') || cluster.chars().any(is_emoji) || cluster.chars().any(is_regional_indicator) {
+    if cluster.contains('\u{200d}')
+        || cluster.chars().any(is_emoji)
+        || cluster.chars().any(is_regional_indicator)
+    {
         return 1.0;
     }
 
