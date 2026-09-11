@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{sync::OnceLock, time::Duration};
 
 use reqwest::{
     Url,
@@ -10,6 +10,8 @@ use reqwest::{
 const MAX_DOCUMENT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_STYLESHEET_BYTES: usize = 2 * 1024 * 1024;
 const MAX_IMAGE_BYTES: usize = 12 * 1024 * 1024;
+
+static HTTP_CLIENT: OnceLock<Result<Client, String>> = OnceLock::new();
 
 #[derive(Debug, Clone)]
 pub struct FetchResponse {
@@ -75,6 +77,21 @@ pub fn fetch_image(url: &str) -> Result<BinaryFetchResponse, String> {
     )
 }
 
+fn http_client() -> Result<&'static Client, String> {
+    HTTP_CLIENT
+        .get_or_init(|| {
+            Client::builder()
+                .user_agent("CherryBrowser/0.2 (+https://github.com/paddman/CherryBrowser)")
+                .timeout(Duration::from_secs(25))
+                .connect_timeout(Duration::from_secs(10))
+                .redirect(Policy::limited(10))
+                .build()
+                .map_err(|error| format!("failed to initialize HTTP client: {error}"))
+        })
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
 fn fetch_text_with_limit(
     url: &str,
     accept: &str,
@@ -98,15 +115,7 @@ fn fetch_bytes_with_limit(
     max_bytes: usize,
 ) -> Result<BinaryFetchResponse, String> {
     let normalized = normalize_url(url)?;
-    let client = Client::builder()
-        .user_agent("CherryBrowser/0.2 (+https://github.com/paddman/CherryBrowser)")
-        .timeout(Duration::from_secs(25))
-        .connect_timeout(Duration::from_secs(10))
-        .redirect(Policy::limited(10))
-        .build()
-        .map_err(|error| format!("failed to initialize HTTP client: {error}"))?;
-
-    let response = client
+    let response = http_client()?
         .get(&normalized)
         .header(ACCEPT, accept)
         .header(ACCEPT_LANGUAGE, "th,en-US;q=0.9,en;q=0.8")
