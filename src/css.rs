@@ -20,6 +20,7 @@ pub struct Rule {
 pub struct Declaration {
     pub name: String,
     pub value: String,
+    pub important: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -35,22 +36,44 @@ struct SimpleSelector {
     classes: Vec<String>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+struct CascadePriority {
+    important: u8,
+    inline: u8,
+    specificity: u32,
+    source_order: usize,
+    declaration_order: usize,
+}
+
 pub fn parse_stylesheet(input: &str) -> Stylesheet {
     let cleaned = strip_comments(input);
-    let mut rest = cleaned.as_str();
     let mut rules = Vec::new();
     let mut source_order = 0;
+    let mut pos = 0;
 
-    while let Some(open) = rest.find('{') {
-        let selector_text = rest[..open].trim();
-        let after_open = &rest[open + 1..];
-        let Some(close) = after_open.find('}') else {
+    while pos < cleaned.len() {
+        pos = skip_ascii_whitespace(&cleaned, pos);
+        if pos >= cleaned.len() {
+            break;
+        }
+
+        if cleaned.as_bytes()[pos] == b'@' {
+            pos = skip_at_rule(&cleaned, pos);
+            continue;
+        }
+
+        let Some(relative_open) = cleaned[pos..].find('{') else {
             break;
         };
-        let body = &after_open[..close];
-        rest = &after_open[close + 1..];
+        let open = pos + relative_open;
+        let selector_text = cleaned[pos..open].trim();
+        let Some(close) = find_matching_brace(&cleaned, open) else {
+            break;
+        };
+        let body = &cleaned[open + 1..close];
+        pos = close + 1;
 
-        if selector_text.is_empty() || selector_text.starts_with('@') {
+        if selector_text.is_empty() {
             continue;
         }
 
@@ -84,18 +107,16 @@ pub fn parse_declarations(input: &str) -> Vec<Declaration> {
         .filter_map(|part| {
             let (name, value) = part.split_once(':')?;
             let name = name.trim().to_ascii_lowercase();
-            let value = value.trim();
+            let (value, important) = parse_important(value);
             if name.is_empty() || value.is_empty() {
                 return None;
             }
 
-            let value = value
-                .strip_suffix("!important")
-                .unwrap_or(value)
-                .trim()
-                .to_string();
-
-            Some(Declaration { name, value })
+            Some(Declaration {
+                name,
+                value: value.to_string(),
+                important,
+            })
         })
         .collect()
 }
@@ -107,6 +128,7 @@ pub fn cascade(
     inherited: &Properties,
 ) -> Properties {
     let mut properties = Properties::new();
+    let mut winners: HashMap<String, (CascadePriority, String)> = HashMap::new();
 
     for name in INHERITED_PROPERTIES {
         if let Some(value) = inherited.get(*name) {
@@ -114,7 +136,6 @@ pub fn cascade(
         }
     }
 
-    let mut matching = Vec::new();
     for rule in &stylesheet.rules {
         let best_specificity = rule
             .selectors
@@ -123,26 +144,57 @@ pub fn cascade(
             .map(|selector| selector.specificity)
             .max();
 
-        if let Some(specificity) = best_specificity {
-            matching.push((specificity, rule.source_order, rule));
-        }
-    }
+        let Some(specificity) = best_specificity else {
+            continue;
+        };
 
-    matching.sort_by_key(|(specificity, source_order, _)| (*specificity, *source_order));
-
-    for (_, _, rule) in matching {
-        for declaration in &rule.declarations {
-            properties.insert(declaration.name.clone(), declaration.value.clone());
+        for (declaration_order, declaration) in rule.declarations.iter().enumerate() {
+            let priority = CascadePriority {
+                important: u8::from(declaration.important),
+                inline: 0,
+                specificity,
+                source_order: rule.source_order,
+                declaration_order,
+            };
+            apply_candidate(&mut winners, declaration, priority);
         }
     }
 
     if let Some(inline) = dom.attr(node, "style") {
-        for declaration in parse_declarations(inline) {
-            properties.insert(declaration.name, declaration.value);
+        for (declaration_order, declaration) in parse_declarations(inline).iter().enumerate() {
+            let priority = CascadePriority {
+                important: u8::from(declaration.important),
+                inline: 1,
+                specificity: u32::MAX,
+                source_order: usize::MAX,
+                declaration_order,
+            };
+            apply_candidate(&mut winners, declaration, priority);
         }
     }
 
+    for (name, (_, value)) in winners {
+        properties.insert(name, value);
+    }
+
     properties
+}
+
+fn apply_candidate(
+    winners: &mut HashMap<String, (CascadePriority, String)>,
+    declaration: &Declaration,
+    priority: CascadePriority,
+) {
+    let should_replace = winners
+        .get(&declaration.name)
+        .is_none_or(|(current, _)| priority >= *current);
+
+    if should_replace {
+        winners.insert(
+            declaration.name.clone(),
+            (priority, declaration.value.clone()),
+        );
+    }
 }
 
 impl Selector {
@@ -215,8 +267,11 @@ impl SimpleSelector {
 }
 
 fn parse_selector(raw: &str) -> Option<Selector> {
-    let normalized = raw.replace('>', " ").replace('+', " ").replace('~', " ");
-    let parts = normalized
+    if raw.contains('>') || raw.contains('+') || raw.contains('~') {
+        return None;
+    }
+
+    let parts = raw
         .split_whitespace()
         .filter_map(parse_simple_selector)
         .collect::<Vec<_>>();
@@ -288,14 +343,105 @@ fn parse_simple_selector(raw: &str) -> Option<SimpleSelector> {
             }
             ':' | '[' => {
                 // Pseudo classes/elements and attribute selectors are intentionally
-                // ignored in milestone 0.1 rather than pretending to implement them.
-                break;
+                // unsupported for now. Reject this selector instead of silently
+                // broadening the match and applying styles to the wrong elements.
+                return None;
             }
             _ => pos += 1,
         }
     }
 
     Some(selector)
+}
+
+fn parse_important(value: &str) -> (&str, bool) {
+    let trimmed = value.trim();
+    let lower = trimmed.to_ascii_lowercase();
+    if lower.ends_with("!important") {
+        let cutoff = trimmed.len() - "!important".len();
+        (trimmed[..cutoff].trim(), true)
+    } else {
+        (trimmed, false)
+    }
+}
+
+fn skip_ascii_whitespace(input: &str, mut pos: usize) -> usize {
+    while input
+        .as_bytes()
+        .get(pos)
+        .is_some_and(|byte| byte.is_ascii_whitespace())
+    {
+        pos += 1;
+    }
+    pos
+}
+
+fn skip_at_rule(input: &str, start: usize) -> usize {
+    let bytes = input.as_bytes();
+    let mut pos = start;
+    let mut quote = None;
+
+    while pos < bytes.len() {
+        let byte = bytes[pos];
+        if let Some(active_quote) = quote {
+            if byte == b'\\' {
+                pos = (pos + 2).min(bytes.len());
+                continue;
+            }
+            if byte == active_quote {
+                quote = None;
+            }
+            pos += 1;
+            continue;
+        }
+
+        match byte {
+            b'\'' | b'"' => quote = Some(byte),
+            b';' => return pos + 1,
+            b'{' => return find_matching_brace(input, pos).map_or(input.len(), |close| close + 1),
+            _ => {}
+        }
+        pos += 1;
+    }
+
+    input.len()
+}
+
+fn find_matching_brace(input: &str, open: usize) -> Option<usize> {
+    let bytes = input.as_bytes();
+    let mut depth = 0usize;
+    let mut quote = None;
+    let mut pos = open;
+
+    while pos < bytes.len() {
+        let byte = bytes[pos];
+        if let Some(active_quote) = quote {
+            if byte == b'\\' {
+                pos = (pos + 2).min(bytes.len());
+                continue;
+            }
+            if byte == active_quote {
+                quote = None;
+            }
+            pos += 1;
+            continue;
+        }
+
+        match byte {
+            b'\'' | b'"' => quote = Some(byte),
+            b'{' => depth += 1,
+            b'}' => {
+                depth = depth.checked_sub(1)?;
+                if depth == 0 {
+                    return Some(pos);
+                }
+            }
+            _ => {}
+        }
+        pos += 1;
+    }
+
+    None
 }
 
 fn strip_comments(input: &str) -> String {
@@ -353,11 +499,47 @@ mod tests {
     }
 
     #[test]
-    fn inline_style_wins() {
+    fn inline_style_wins_normal_author_rule() {
         let dom = html::parse(r#"<p style="color: red">x</p>"#);
         let sheet = parse_stylesheet("p { color: blue; }");
         let p = dom.find_first_tag("p").unwrap();
         let style = cascade(&dom, p, &sheet, &HashMap::new());
         assert_eq!(style.get("color").map(String::as_str), Some("red"));
+    }
+
+    #[test]
+    fn important_author_rule_beats_normal_inline_style() {
+        let dom = html::parse(r#"<p id="lead" style="color: green">x</p>"#);
+        let sheet = parse_stylesheet("#lead { color: blue !important; } p { color: red; }");
+        let p = dom.find_first_tag("p").unwrap();
+        let style = cascade(&dom, p, &sheet, &HashMap::new());
+        assert_eq!(style.get("color").map(String::as_str), Some("blue"));
+    }
+
+    #[test]
+    fn important_inline_style_beats_important_author_rule() {
+        let dom = html::parse(r#"<p id="lead" style="color: green !IMPORTANT">x</p>"#);
+        let sheet = parse_stylesheet("#lead { color: blue !important; }");
+        let p = dom.find_first_tag("p").unwrap();
+        let style = cascade(&dom, p, &sheet, &HashMap::new());
+        assert_eq!(style.get("color").map(String::as_str), Some("green"));
+    }
+
+    #[test]
+    fn skips_unsupported_at_rule_blocks_without_eating_following_rules() {
+        let sheet = parse_stylesheet(
+            r#"
+            @charset "utf-8";
+            @media print { p { color: black; } }
+            p { color: blue; }
+            "#,
+        );
+        assert_eq!(sheet.rules.len(), 1);
+    }
+
+    #[test]
+    fn rejects_unsupported_combinators_instead_of_broadening_them() {
+        let sheet = parse_stylesheet("div > p { color: red; } p { color: blue; }");
+        assert_eq!(sheet.rules.len(), 1);
     }
 }
