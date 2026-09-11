@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use image::{ImageFormat, ImageReaderOptions, Limits};
+use image::{ImageFormat, ImageReader, Limits};
 
 const MAX_IMAGE_WIDTH: u32 = 8192;
 const MAX_IMAGE_HEIGHT: u32 = 8192;
@@ -29,8 +29,7 @@ pub fn decode(bytes: &[u8]) -> Result<DecodedImage, String> {
     limits.max_image_height = Some(MAX_IMAGE_HEIGHT);
     limits.max_alloc = Some(MAX_DECODE_ALLOC);
 
-    let mut reader = ImageReaderOptions::new(Cursor::new(bytes));
-    reader.set_format(format);
+    let mut reader = ImageReader::with_format(Cursor::new(bytes), format);
     reader.limits(limits);
 
     let decoded = reader
