@@ -1,6 +1,9 @@
+use std::collections::HashMap;
+
 use crate::{
     css::{self, Properties, Stylesheet},
     dom::{Dom, NodeId, NodeKind},
+    image_data::DecodedImage,
 };
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -33,6 +36,7 @@ impl Rgba {
 #[derive(Debug, Clone)]
 pub enum PaintItem {
     Rect(RectItem),
+    Image(ImageItem),
     Text(TextItem),
 }
 
@@ -40,6 +44,12 @@ pub enum PaintItem {
 pub struct RectItem {
     pub rect: RectF,
     pub color: Rgba,
+}
+
+#[derive(Debug, Clone)]
+pub struct ImageItem {
+    pub rect: RectF,
+    pub node: NodeId,
 }
 
 #[derive(Debug, Clone)]
@@ -127,8 +137,18 @@ impl Bounds {
 }
 
 pub fn layout_document(dom: &Dom, stylesheet: &Stylesheet, viewport_width: f32) -> LayoutDocument {
+    let images = HashMap::new();
+    layout_document_with_images(dom, stylesheet, &images, viewport_width)
+}
+
+pub fn layout_document_with_images(
+    dom: &Dom,
+    stylesheet: &Stylesheet,
+    images: &HashMap<NodeId, DecodedImage>,
+    viewport_width: f32,
+) -> LayoutDocument {
     let width = viewport_width.max(320.0);
-    let mut flow = Flow::new(dom, stylesheet, width);
+    let mut flow = Flow::new(dom, stylesheet, images, width);
     let root_style = ComputedStyle::default();
     let inherited = Properties::new();
     flow.layout_node(
@@ -150,6 +170,7 @@ pub fn layout_document(dom: &Dom, stylesheet: &Stylesheet, viewport_width: f32) 
 struct Flow<'a> {
     dom: &'a Dom,
     stylesheet: &'a Stylesheet,
+    images: &'a HashMap<NodeId, DecodedImage>,
     items: Vec<PaintItem>,
     x: f32,
     y: f32,
@@ -159,10 +180,16 @@ struct Flow<'a> {
 }
 
 impl<'a> Flow<'a> {
-    fn new(dom: &'a Dom, stylesheet: &'a Stylesheet, width: f32) -> Self {
+    fn new(
+        dom: &'a Dom,
+        stylesheet: &'a Stylesheet,
+        images: &'a HashMap<NodeId, DecodedImage>,
+        width: f32,
+    ) -> Self {
         Self {
             dom,
             stylesheet,
+            images,
             items: Vec::new(),
             x: 0.0,
             y: 0.0,
@@ -359,14 +386,25 @@ impl<'a> Flow<'a> {
     }
 
     fn layout_image(&mut self, node: NodeId, style: &ComputedStyle, bounds: Bounds) {
-        let width = style
+        let intrinsic = self.images.get(&node);
+        let explicit_width = style
             .width
-            .or_else(|| self.dom.attr(node, "width").and_then(parse_plain_px))
+            .or_else(|| self.dom.attr(node, "width").and_then(parse_plain_px));
+        let explicit_height = style
+            .height
+            .or_else(|| self.dom.attr(node, "height").and_then(parse_plain_px));
+
+        let width = explicit_width
+            .or_else(|| intrinsic.map(|image| image.width as f32))
             .unwrap_or(240.0)
             .clamp(24.0, bounds.width);
-        let height = style
-            .height
-            .or_else(|| self.dom.attr(node, "height").and_then(parse_plain_px))
+        let height = explicit_height
+            .or_else(|| {
+                intrinsic.map(|image| {
+                    let ratio = image.height as f32 / image.width.max(1) as f32;
+                    width * ratio
+                })
+            })
             .unwrap_or(140.0)
             .max(24.0);
 
@@ -385,23 +423,27 @@ impl<'a> Flow<'a> {
             color: Rgba::PLACEHOLDER,
         }));
 
-        let alt = self.dom.attr(node, "alt").unwrap_or("image");
-        self.items.push(PaintItem::Text(TextItem {
-            rect: RectF {
-                x: self.x + 8.0,
-                y: self.y + 8.0,
-                width: (width - 16.0).max(1.0),
-                height: style.line_height,
-            },
-            text: alt.to_string(),
-            font_size: style.font_size.min(14.0),
-            color: Rgba::rgb(70, 76, 86),
-            bold: false,
-            italic: false,
-            monospace: false,
-            underline: false,
-            href: None,
-        }));
+        if intrinsic.is_some() {
+            self.items.push(PaintItem::Image(ImageItem { rect, node }));
+        } else {
+            let alt = self.dom.attr(node, "alt").unwrap_or("image");
+            self.items.push(PaintItem::Text(TextItem {
+                rect: RectF {
+                    x: self.x + 8.0,
+                    y: self.y + 8.0,
+                    width: (width - 16.0).max(1.0),
+                    height: style.line_height,
+                },
+                text: alt.to_string(),
+                font_size: style.font_size.min(14.0),
+                color: Rgba::rgb(70, 76, 86),
+                bold: false,
+                italic: false,
+                monospace: false,
+                underline: false,
+                href: None,
+            }));
+        }
 
         self.x += width + 8.0;
         self.line_height = self.line_height.max(height + 8.0);
@@ -793,9 +835,11 @@ fn hex_digit(ch: char) -> Option<u8> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{css, html};
+    use std::collections::HashMap;
 
-    use super::{PaintItem, layout_document};
+    use crate::{css, html, image_data::DecodedImage};
+
+    use super::{PaintItem, layout_document, layout_document_with_images};
 
     #[test]
     fn produces_text_layout() {
@@ -820,5 +864,26 @@ mod tests {
                 .iter()
                 .any(|item| matches!(item, PaintItem::Text(text) if text.text == "secret"))
         );
+    }
+
+    #[test]
+    fn emits_image_item_for_decoded_image() {
+        let dom = html::parse("<img src='hero.png'>");
+        let image_node = dom.find_first_tag("img").unwrap();
+        let sheet = css::parse_stylesheet("");
+        let mut images = HashMap::new();
+        images.insert(
+            image_node,
+            DecodedImage {
+                width: 320,
+                height: 180,
+                rgba: vec![0; 320 * 180 * 4],
+            },
+        );
+
+        let doc = layout_document_with_images(&dom, &sheet, &images, 800.0);
+        assert!(doc.items.iter().any(
+            |item| matches!(item, PaintItem::Image(image) if image.node == image_node)
+        ));
     }
 }
