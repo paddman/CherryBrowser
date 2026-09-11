@@ -6,9 +6,9 @@ The project does **not** embed Chromium/Blink, WebKit, Firefox/Gecko, CEF, Elect
 
 General-purpose Rust libraries are used only for infrastructure primitives such as native OS UI, HTTP/TLS transport, compression, and image codecs. They are not browser engines.
 
-## Milestone 0.3.1
+## Milestone 0.3.2
 
-CherryBrowser has an end-to-end native browsing pipeline and is now hardening compatibility, cancellation, resource safety, and legacy text decoding before larger web-platform features.
+CherryBrowser has an end-to-end native browsing pipeline and is now hardening compatibility, parsing correctness, cancellation, resource safety, and legacy text decoding before larger web-platform features.
 
 Implemented:
 
@@ -35,9 +35,15 @@ Implemented:
 - Stylesheet deduplication plus count/size safety limits
 - Repeated image URL fetch/decode deduplication
 - Embedded and external CSS merged in DOM order
-- Independent CSS parser
+- Independent CSS parser and cascade
+- Syntax-aware CSS comment scanning that preserves comment markers inside quoted strings
+- Top-level CSS declaration splitting that respects strings, escapes, functions, brackets, and nested blocks
+- CSS values containing data URLs, colons, or semicolons no longer split declarations incorrectly
+- Top-level `!important` parsing without treating quoted/function content as a priority marker
+- Custom property names preserve case and custom properties inherit through the current style map
 - Tag, class, ID and descendant selector matching
 - Unsupported combinators/pseudo/attribute selectors rejected instead of silently broadening matches
+- Invalid selector components and selector-list members reject the rule instead of partially applying it
 - `!important`, inline style, specificity, source-order, and declaration-order priority handling
 - Safe skipping of unsupported at-rules
 - Block and inline flow layout
@@ -78,7 +84,9 @@ Current milestone limits are intentionally conservative while the engine matures
 
 - JavaScript runtime
 - HTML5-complete error recovery
-- Full CSS tokenizer/grammar, origins/layers, and modern selector grammar
+- Full standards-complete CSS tokenizer/grammar, origins/layers, and modern selector grammar
+- CSS escape decoding and the complete identifier grammar
+- `var()` substitution and full custom-property computed-value semantics
 - Correct complete inline formatting context and text shaping
 - Unicode/Thai line-breaking engine independent from whitespace splitting
 - CSS Flexbox/Grid
@@ -122,7 +130,7 @@ Cherry HTML Parser
  v
 Cherry DOM
  |       \
- |        +--> Cherry CSS parser / cascade
+ |        +--> Cherry CSS syntax scanner / parser / cascade
  |                    |
  +--------------------+
           |
@@ -148,7 +156,8 @@ src/
 ├── text.rs        Web text charset/BOM/meta decoding
 ├── dom.rs         DOM tree
 ├── html.rs        HTML tokenizer/parser
-├── css.rs         CSS parser, selectors and cascade
+├── css.rs         CSS rules, selectors, declarations and cascade
+├── css_syntax.rs  CSS syntax-aware scanning and top-level splitting
 ├── image_data.rs  Bounded PNG/JPEG/WebP decoding
 ├── layout.rs      Block/inline layout and display list
 ├── renderer.rs    Native painting, image textures and link hit testing
@@ -174,15 +183,14 @@ It must not replace its browser engine with Chromium/Blink, WebKit, Gecko, CEF, 
 
 ## Next engine milestones
 
-1. Real CSS tokenization/declaration parsing before adding larger CSS layout features
-2. Unicode line breaking, Thai-aware wrapping, grapheme handling, and real glyph measurement/shaping
-3. Correct inline formatting contexts and more of the CSS box model
-4. Attribute selectors, pseudo classes, media-query evaluation, then Flexbox/Grid
-5. Same-Origin Policy foundation, forms/input events, cookie jar, HTTP cache, and origin storage
-6. Parser fuzzing, rendering regression tests, and a Web Platform Tests subset harness
-7. JavaScript tokenizer/parser and AST
-8. Bytecode VM and garbage collector
-9. DOM bindings, event loop, timers, promises, and Fetch APIs
-10. Dedicated GPU compositor
-11. Multi-process renderer sandbox and site isolation
-12. HTTP/2 and HTTP/3 tuning
+1. Unicode line breaking, Thai-aware wrapping, grapheme handling, and real glyph measurement/shaping
+2. Correct inline formatting contexts and more of the CSS box model
+3. Attribute selectors, pseudo classes, media-query evaluation, then Flexbox/Grid
+4. Same-Origin Policy foundation, forms/input events, cookie jar, HTTP cache, and origin storage
+5. Parser fuzzing, rendering regression tests, and a Web Platform Tests subset harness
+6. JavaScript tokenizer/parser and AST
+7. Bytecode VM and garbage collector
+8. DOM bindings, event loop, timers, promises, and Fetch APIs
+9. Dedicated GPU compositor
+10. Multi-process renderer sandbox and site isolation
+11. HTTP/2 and HTTP/3 tuning

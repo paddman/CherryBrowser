@@ -6,6 +6,7 @@
 pub mod app;
 pub mod cancel;
 pub mod css;
+mod css_syntax;
 pub mod dom;
 pub mod html;
 pub mod image_data;
