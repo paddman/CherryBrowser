@@ -1,8 +1,8 @@
 use eframe::egui;
 
-use super::theme;
+use super::{ShellPage, theme};
 
-pub fn show(ui: &mut egui::Ui) {
+pub fn show(ui: &mut egui::Ui, page: &mut ShellPage) {
     theme::card().show(ui, |ui| {
         ui.set_min_width(188.0);
         ui.set_max_width(208.0);
@@ -47,14 +47,20 @@ pub fn show(ui: &mut egui::Ui) {
         });
 
         ui.add_space(14.0);
-        nav_row(ui, "⌂", "New Tab", true);
-        nav_row(ui, "✦", "AI Assistant", false);
-        nav_row(ui, "▣", "Workspaces", false);
-        nav_row(ui, "☆", "Bookmarks", false);
-        nav_row(ui, "◷", "History", false);
-        nav_row(ui, "⇩", "Downloads", false);
-        nav_row(ui, "◎", "Security Insights", false);
-        nav_row(ui, "◇", "Extensions", false);
+        if nav_row(ui, "⌂", "New Tab", *page == ShellPage::NewTab) {
+            *page = ShellPage::NewTab;
+        }
+        let _ = nav_row(ui, "✦", "AI Assistant", false);
+        if nav_row(ui, "▣", "Research Workspace", *page == ShellPage::Research) {
+            *page = ShellPage::Research;
+        }
+        let _ = nav_row(ui, "☆", "Bookmarks", false);
+        let _ = nav_row(ui, "◷", "History", false);
+        let _ = nav_row(ui, "⇩", "Downloads", false);
+        let _ = nav_row(ui, "◎", "Security Insights", false);
+        if nav_row(ui, "◇", "Themes & Settings", *page == ShellPage::Settings) {
+            *page = ShellPage::Settings;
+        }
 
         ui.add_space(10.0);
         ui.separator();
@@ -113,27 +119,22 @@ pub fn show(ui: &mut egui::Ui) {
     });
 }
 
-fn nav_row(ui: &mut egui::Ui, icon: &str, label: &str, active: bool) {
+fn nav_row(ui: &mut egui::Ui, icon: &str, label: &str, active: bool) -> bool {
     let fill = if active {
         egui::Color32::from_rgb(26, 65, 139)
     } else {
-        egui::Color32::TRANSPARENT
+        egui::Color32::from_rgb(7, 15, 34)
     };
-    egui::Frame::default()
-        .fill(fill)
-        .corner_radius(egui::CornerRadius::same(5))
-        .inner_margin(egui::Margin::symmetric(8, 6))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(icon).color(if active {
-                    theme::CYAN
-                } else {
-                    theme::MUTED
-                }));
-                ui.label(egui::RichText::new(label).color(theme::TEXT));
-            });
-        });
+    ui.add_sized(
+        [ui.available_width(), 28.0],
+        egui::Button::new(format!("{icon}   {label}"))
+            .fill(fill)
+            .stroke(egui::Stroke::new(
+                1.0,
+                if active { theme::BLUE } else { theme::BORDER },
+            )),
+    )
+    .clicked()
 }
 
 fn workspace_row(ui: &mut egui::Ui, name: &str, tabs: &str, active: bool, accent: egui::Color32) {
