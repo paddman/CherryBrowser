@@ -1,16 +1,16 @@
 use eframe::egui;
 
-use super::{assistant, design_system, sidebar, theme, workspace};
+use super::{assistant, design_system, research, settings, sidebar, theme, workspace, ShellPage};
 
-/// Render the first-party CherryBrowser start surface.
+/// Render the first-party CherryBrowser shell.
 /// Returns true when the user submits the home URL field.
-pub fn show(ui: &mut egui::Ui, url_input: &mut String) -> bool {
+pub fn show(ui: &mut egui::Ui, url_input: &mut String, page: &mut ShellPage) -> bool {
     let mut submit = false;
 
     egui::ScrollArea::vertical()
         .auto_shrink([false, false])
         .show(ui, |ui| {
-            tab_strip(ui);
+            tab_strip(ui, page);
             ui.add_space(8.0);
 
             let available = ui.available_width().max(760.0);
@@ -18,86 +18,91 @@ pub fn show(ui: &mut egui::Ui, url_input: &mut String) -> bool {
             let right_w = 270.0;
             let gap_budget = 28.0;
             let center_w = (available - left_w - right_w - gap_budget).max(420.0);
+            let shell_height = if *page == ShellPage::NewTab { 560.0 } else { 720.0 };
 
             ui.horizontal_top(|ui| {
                 ui.allocate_ui_with_layout(
-                    egui::vec2(left_w, 560.0),
+                    egui::vec2(left_w, shell_height),
                     egui::Layout::top_down(egui::Align::Min),
-                    sidebar::show,
+                    |ui| sidebar::show(ui, page),
                 );
 
                 ui.add_space(6.0);
                 ui.allocate_ui_with_layout(
-                    egui::vec2(center_w, 560.0),
+                    egui::vec2(center_w, shell_height),
                     egui::Layout::top_down(egui::Align::Min),
-                    |ui| {
-                        hero(ui);
-                        ui.add_space(10.0);
+                    |ui| match page {
+                        ShellPage::NewTab => {
+                            hero(ui);
+                            ui.add_space(10.0);
 
-                        let response = ui.add_sized(
-                            [ui.available_width(), 38.0],
-                            egui::TextEdit::singleline(url_input)
-                                .hint_text("Search or enter URL")
-                                .margin(egui::Margin::symmetric(12, 8)),
-                        );
-                        let enter = ui.input(|input| input.key_pressed(egui::Key::Enter));
-                        if response.lost_focus() && enter {
-                            submit = true;
+                            let response = ui.add_sized(
+                                [ui.available_width(), 38.0],
+                                egui::TextEdit::singleline(url_input)
+                                    .hint_text("Search or enter URL")
+                                    .margin(egui::Margin::symmetric(12, 8)),
+                            );
+                            let enter = ui.input(|input| input.key_pressed(egui::Key::Enter));
+                            if response.lost_focus() && enter {
+                                submit = true;
+                            }
+
+                            ui.add_space(9.0);
+                            workspace::quick_links(ui);
+                            ui.add_space(10.0);
+                            workspace::feature_cards(ui);
                         }
-
-                        ui.add_space(9.0);
-                        workspace::quick_links(ui);
-                        ui.add_space(10.0);
-                        workspace::feature_cards(ui);
+                        ShellPage::Research => research::show(ui),
+                        ShellPage::Settings => settings::show(ui),
                     },
                 );
 
                 ui.add_space(6.0);
                 ui.allocate_ui_with_layout(
-                    egui::vec2(right_w, 560.0),
+                    egui::vec2(right_w, shell_height),
                     egui::Layout::top_down(egui::Align::Min),
                     assistant::show,
                 );
             });
 
-            ui.add_space(12.0);
-            workspace::bottom_dock(ui);
-            ui.add_space(10.0);
-            design_system::show(ui);
-            ui.add_space(18.0);
+            if *page == ShellPage::NewTab {
+                ui.add_space(12.0);
+                workspace::bottom_dock(ui);
+                ui.add_space(10.0);
+                design_system::show(ui);
+            }
 
-            ui.horizontal(|ui| {
-                ui.label(
-                    egui::RichText::new("CHERRYBROWSER")
-                        .strong()
-                        .color(theme::TEXT),
-                );
-                ui.label(
-                    egui::RichText::new("— A MORE OPEN TOMORROW")
-                        .size(10.0)
-                        .color(theme::MUTED),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(
-                        egui::RichText::new("BROWSE · CREATE · CONNECT · TOGETHER")
-                            .size(9.0)
-                            .color(theme::VIOLET),
-                    );
-                });
-            });
+            ui.add_space(18.0);
+            footer(ui, *page);
             ui.add_space(8.0);
         });
 
     submit
 }
 
-fn tab_strip(ui: &mut egui::Ui) {
+fn tab_strip(ui: &mut egui::Ui, page: &mut ShellPage) {
     theme::card().show(ui, |ui| {
         ui.horizontal(|ui| {
-            tab(ui, "New Tab", true, theme::BLUE);
-            tab(ui, "Research Workspace", false, theme::CYAN);
-            tab(ui, "Design Systems", false, theme::VIOLET);
-            tab(
+            if tab(ui, "New Tab", *page == ShellPage::NewTab, theme::BLUE) {
+                *page = ShellPage::NewTab;
+            }
+            if tab(
+                ui,
+                "Research Workspace",
+                *page == ShellPage::Research,
+                theme::CYAN,
+            ) {
+                *page = ShellPage::Research;
+            }
+            if tab(
+                ui,
+                "Design Systems",
+                *page == ShellPage::Settings,
+                theme::VIOLET,
+            ) {
+                *page = ShellPage::Settings;
+            }
+            let _ = tab(
                 ui,
                 "AI & Education",
                 false,
@@ -115,7 +120,7 @@ fn tab_strip(ui: &mut egui::Ui) {
     });
 }
 
-fn tab(ui: &mut egui::Ui, text: &str, active: bool, accent: egui::Color32) {
+fn tab(ui: &mut egui::Ui, text: &str, active: bool, accent: egui::Color32) -> bool {
     let fill = if active {
         egui::Color32::from_rgb(17, 46, 102)
     } else {
@@ -128,7 +133,34 @@ fn tab(ui: &mut egui::Ui, text: &str, active: bool, accent: egui::Color32) {
     }))
     .fill(fill)
     .stroke(egui::Stroke::new(if active { 1.5 } else { 1.0 }, accent));
-    ui.add(button);
+    ui.add(button).clicked()
+}
+
+fn footer(ui: &mut egui::Ui, page: ShellPage) {
+    let section = match page {
+        ShellPage::NewTab => "NEW TAB",
+        ShellPage::Research => "RESEARCH WORKSPACE",
+        ShellPage::Settings => "SETTINGS / DESIGN SYSTEM",
+    };
+    ui.horizontal(|ui| {
+        ui.label(
+            egui::RichText::new("CHERRYBROWSER")
+                .strong()
+                .color(theme::TEXT),
+        );
+        ui.label(
+            egui::RichText::new(format!("— {section}"))
+                .size(10.0)
+                .color(theme::MUTED),
+        );
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            ui.label(
+                egui::RichText::new("BROWSE · CREATE · CONNECT · TOGETHER")
+                    .size(9.0)
+                    .color(theme::VIOLET),
+            );
+        });
+    });
 }
 
 fn hero(ui: &mut egui::Ui) {
