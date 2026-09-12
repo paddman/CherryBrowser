@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#030817"/>
+      <stop offset="0.58" stop-color="#07152f"/>
+      <stop offset="1" stop-color="#13082d"/>
+    </linearGradient>
+    <linearGradient id="hero" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0a2148"/>
+      <stop offset="0.58" stop-color="#0a2f6b"/>
+      <stop offset="1" stop-color="#26115b"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <style>
+      .panel{fill:#081125;stroke:#234b8b;stroke-width:1.4}.panel2{fill:#0d1831;stroke:#2b5ca5;stroke-width:1.2}
+      .txt{fill:#e1eeff;font-family:Inter,Segoe UI,Arial,sans-serif}.muted{fill:#97a8c9;font-family:Inter,Segoe UI,Arial,sans-serif}
+      .blue{fill:#3d96ff}.violet{fill:#8e57ff}.cyan{fill:#40e2ff}.line{stroke:#3d96ff;stroke-opacity:.45;fill:none}
+    </style>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <g opacity=".25">
+    <path d="M0 120H1600M0 240H1600M0 360H1600M0 480H1600M0 600H1600M0 720H1600M0 840H1600" stroke="#2868bb"/>
+    <path d="M160 0V900M320 0V900M480 0V900M640 0V900M800 0V900M960 0V900M1120 0V900M1280 0V900M1440 0V900" stroke="#2868bb"/>
+  </g>
+  <text x="38" y="48" class="txt" font-size="25" font-weight="700">CHERRYBROWSER</text>
+  <text x="38" y="70" class="muted" font-size="11" letter-spacing="4">A MORE OPEN TOMORROW</text>
+  <text x="1240" y="48" class="cyan" font-family="monospace" font-size="11">NATIVE RUST UX / MASTER SHELL</text>
+
+  <rect x="30" y="92" width="1540" height="52" rx="10" class="panel"/>
+  <rect x="50" y="104" width="140" height="28" rx="6" fill="#173e84" stroke="#3d96ff"/>
+  <text x="70" y="123" class="txt" font-size="11">New Tab</text>
+  <rect x="198" y="104" width="175" height="28" rx="6" fill="#0b1834" stroke="#40e2ff"/>
+  <text x="215" y="123" class="muted" font-size="11">Research Workspace</text>
+  <rect x="381" y="104" width="170" height="28" rx="6" fill="#0b1834" stroke="#8e57ff"/>
+  <text x="400" y="123" class="muted" font-size="11">Design Systems</text>
+  <rect x="568" y="104" width="770" height="28" rx="14" fill="#071126" stroke="#234b8b"/>
+  <text x="590" y="123" class="muted" font-size="10">Search or enter address</text>
+
+  <rect x="30" y="158" width="225" height="540" rx="12" class="panel"/>
+  <text x="50" y="190" class="txt" font-size="14" font-weight="700">CHERRYBROWSER</text>
+  <rect x="44" y="211" width="197" height="34" rx="7" fill="#17478f"/>
+  <text x="62" y="233" class="txt" font-size="11">⌂  New Tab</text>
+  <text x="62" y="276" class="muted" font-size="11">✦  AI Assistant</text>
+  <text x="62" y="311" class="muted" font-size="11">▣  Research Workspace</text>
+  <text x="62" y="346" class="muted" font-size="11">☆  Bookmarks</text>
+  <text x="62" y="381" class="muted" font-size="11">◷  History</text>
+  <text x="62" y="416" class="muted" font-size="11">⇩  Downloads</text>
+  <text x="62" y="451" class="muted" font-size="11">◎  Security Insights</text>
+  <text x="62" y="486" class="muted" font-size="11">◇  Themes &amp; Settings</text>
+  <line x1="48" y1="510" x2="236" y2="510" stroke="#234b8b"/>
+  <text x="50" y="536" class="muted" font-size="9" letter-spacing="2">WORKSPACES</text>
+  <text x="62" y="568" class="txt" font-size="10">●  Personal</text>
+  <text x="62" y="599" class="muted" font-size="10">●  Research</text>
+  <text x="62" y="630" class="muted" font-size="10">●  Work</text>
+  <text x="62" y="661" class="muted" font-size="10">●  Creative</text>
+
+  <rect x="269" y="158" width="1004" height="540" rx="12" class="panel"/>
+  <rect x="286" y="176" width="970" height="274" rx="11" fill="url(#hero)" stroke="#3d96ff" stroke-opacity=".6"/>
+  <text x="322" y="220" class="muted" font-size="13">Good Morning</text>
+  <text x="322" y="258" class="txt" font-size="34" font-weight="700">Explore a More Open Tomorrow</text>
+  <text x="322" y="285" class="cyan" font-size="12">CherryBrowser — Fast. Thoughtful. Yours.</text>
+  <rect x="322" y="320" width="690" height="48" rx="24" fill="#102b61" stroke="#40e2ff"/>
+  <text x="350" y="350" class="muted" font-size="12">Search the web privately…</text>
+  <circle cx="1114" cy="280" r="103" fill="#071c42" stroke="#3d96ff" stroke-width="2"/>
+  <ellipse cx="1114" cy="280" rx="72" ry="103" class="line"/><ellipse cx="1114" cy="280" rx="103" ry="48" class="line"/>
+  <circle cx="1070" cy="246" r="5" class="cyan" filter="url(#glow)"/><circle cx="1157" cy="257" r="5" class="violet" filter="url(#glow)"/><circle cx="1128" cy="326" r="5" class="blue" filter="url(#glow)"/>
+  <path d="M1070 246L1157 257L1128 326L1070 246" class="line"/>
+
+  <g transform="translate(286 466)">
+    <rect width="306" height="116" rx="9" class="panel2"/><text x="16" y="25" class="cyan" font-size="9">SPOTLIGHT</text><text x="16" y="52" class="txt" font-size="15" font-weight="700">A More Open Internet</text><text x="16" y="71" class="txt" font-size="15" font-weight="700">for Everyone</text><text x="16" y="94" class="muted" font-size="9">Open standards · more possibilities</text>
+  </g>
+  <g transform="translate(602 466)">
+    <rect width="306" height="116" rx="9" class="panel2"/><text x="16" y="25" class="violet" font-size="9">WORK TOGETHER</text><text x="16" y="52" class="txt" font-size="15" font-weight="700">Built Different</text><text x="16" y="71" class="txt" font-size="15" font-weight="700">for What's Next</text><text x="16" y="94" class="muted" font-size="9">Research · organize · create</text>
+  </g>
+  <g transform="translate(918 466)">
+    <rect width="338" height="116" rx="9" class="panel2"/><text x="16" y="25" class="blue" font-size="9">INSIGHTS</text><text x="16" y="52" class="txt" font-size="15" font-weight="700">Safer, More Connected</text><text x="16" y="71" class="txt" font-size="15" font-weight="700">Browsing</text><text x="16" y="94" class="muted" font-size="9">Private by design · transparent by default</text>
+  </g>
+  <text x="300" y="674" class="muted" font-size="10">NEW TAB  ·  RESEARCH  ·  SETTINGS / DESIGN SYSTEM are routed as native first-party views</text>
+
+  <rect x="1287" y="158" width="283" height="540" rx="12" class="panel"/>
+  <text x="1311" y="190" class="txt" font-size="14" font-weight="700">CHERRY AI</text><circle cx="1400" cy="185" r="4" fill="#36d399"/>
+  <rect x="1305" y="209" width="247" height="190" rx="10" fill="#071c42" stroke="#3d96ff"/>
+  <circle cx="1428" cy="286" r="42" fill="#f0d4d2"/><circle cx="1405" cy="258" r="30" fill="#2a68e7"/><circle cx="1448" cy="257" r="29" fill="#1f50b7"/>
+  <circle cx="1414" cy="286" r="4" class="blue"/><circle cx="1442" cy="286" r="4" class="blue"/>
+  <text x="1318" y="229" class="cyan" font-family="monospace" font-size="9">HI, I'M CHERRY</text>
+  <text x="1310" y="430" class="txt" font-size="11">Summarize this page</text><text x="1310" y="465" class="txt" font-size="11">Explain something</text><text x="1310" y="500" class="txt" font-size="11">Find related content</text><text x="1310" y="535" class="txt" font-size="11">Translate / Rewrite</text><text x="1310" y="570" class="txt" font-size="11">Help with research</text><text x="1310" y="605" class="txt" font-size="11">Open in workspace</text>
+  <rect x="1305" y="631" width="247" height="42" rx="8" fill="#0e2858" stroke="#3d96ff"/><text x="1320" y="657" class="muted" font-size="10">Ask Cherry anything…</text>
+
+  <g transform="translate(30 716)">
+    <rect width="375" height="142" rx="10" class="panel"/><text x="16" y="28" class="txt" font-size="12" font-weight="700">RESEARCH WORKSPACE</text><text x="16" y="53" class="muted" font-size="9">Notes · Sources · Split View</text><text x="16" y="85" class="txt" font-size="10">01  Space Technology</text><text x="16" y="108" class="txt" font-size="10">02  Clean Energy Trends</text>
+  </g>
+  <g transform="translate(418 716)">
+    <rect width="375" height="142" rx="10" class="panel"/><text x="16" y="28" class="txt" font-size="12" font-weight="700">SECURITY &amp; PRIVACY</text><text x="16" y="53" class="muted" font-size="9">Your browsing, your control</text><text x="16" y="86" class="cyan" font-size="27" font-weight="700">100</text><text x="84" y="79" class="txt" font-size="9">● Tracking blockers active</text><text x="84" y="99" class="txt" font-size="9">● Encrypted connections</text>
+  </g>
+  <g transform="translate(806 716)">
+    <rect width="375" height="142" rx="10" class="panel"/><text x="16" y="28" class="txt" font-size="12" font-weight="700">SETTINGS / DESIGN SYSTEM</text><text x="16" y="53" class="muted" font-size="9">Cyber Blue · Violet Dawn · Midnight · Snow</text><circle cx="40" cy="90" r="8" class="blue"/><circle cx="70" cy="90" r="8" class="cyan"/><circle cx="100" cy="90" r="8" class="violet"/>
+  </g>
+  <g transform="translate(1194 716)">
+    <rect width="376" height="142" rx="10" class="panel"/><text x="16" y="28" class="txt" font-size="12" font-weight="700">RECENT SESSIONS</text><text x="16" y="57" class="txt" font-size="10">Design Systems Research</text><text x="16" y="79" class="muted" font-size="9">12 tabs · 2 hours ago</text><text x="16" y="108" class="txt" font-size="10">AI Tools Comparison</text><text x="16" y="128" class="muted" font-size="9">8 tabs · 5 hours ago</text>
+  </g>
+</svg>

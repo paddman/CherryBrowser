@@ -18,7 +18,7 @@ use crate::{
     image_data::DecodedImage,
     layout::{self, LayoutDocument},
     loader::{self, LoadedDocument},
-    net, renderer, text_layout,
+    net, renderer, text_layout, ui as browser_ui,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -57,26 +57,29 @@ pub struct CherryApp {
     last_error: Option<String>,
     native_metrics_installed: bool,
     system_font_count: usize,
+    show_home: bool,
+    shell_page: browser_ui::ShellPage,
 }
 
 impl CherryApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
+        browser_ui::theme::install(&cc.egui_ctx);
         let system_font_count = font_support::install_system_fallbacks(&cc.egui_ctx).len();
-        let mut app = Self {
-            url_input: "https://example.com/".to_string(),
+        Self {
+            url_input: String::new(),
             current_url: String::new(),
             page: None,
             pending: None,
             history: Vec::new(),
             history_pos: None,
-            status: "Cherry Engine 0.3.4".to_string(),
+            status: "Cherry Engine 0.3.4 · modular UX shell".to_string(),
             hovered_href: None,
             last_error: None,
             native_metrics_installed: false,
             system_font_count,
-        };
-        app.navigate("https://example.com/", HistoryMode::Push);
-        app
+            show_home: true,
+            shell_page: browser_ui::ShellPage::NewTab,
+        }
     }
 
     fn navigate(&mut self, input: &str, history_mode: HistoryMode) {
@@ -93,6 +96,7 @@ impl CherryApp {
             pending.cancel.cancel();
         }
 
+        self.show_home = false;
         self.url_input = normalized.clone();
         self.status = format!("Loading {normalized}");
         self.last_error = None;
@@ -110,6 +114,18 @@ impl CherryApp {
             history_mode,
             cancel,
         });
+    }
+
+    fn show_home(&mut self) {
+        if let Some(pending) = self.pending.take() {
+            pending.cancel.cancel();
+        }
+        self.show_home = true;
+        self.shell_page = browser_ui::ShellPage::NewTab;
+        self.hovered_href = None;
+        self.last_error = None;
+        self.url_input.clear();
+        self.status = "Cherry Browser home · independent Rust engine".to_string();
     }
 
     fn poll_navigation(&mut self) {
@@ -174,6 +190,7 @@ impl CherryApp {
 
         self.current_url = response.final_url.clone();
         self.url_input = response.final_url.clone();
+        self.show_home = false;
         self.status = if resource_warnings.is_empty() {
             format!(
                 "HTTP {} · {} · CSS {} · IMG {} · FONT {} · Cherry Engine",
@@ -252,6 +269,9 @@ impl CherryApp {
     }
 
     fn reload(&mut self) {
+        if self.show_home {
+            return;
+        }
         let url = if self.current_url.is_empty() {
             self.url_input.clone()
         } else {
@@ -326,6 +346,7 @@ impl eframe::App for CherryApp {
         self.ensure_native_text_metrics(ui);
 
         enum Action {
+            Home,
             Back,
             Forward,
             Reload,
@@ -335,10 +356,14 @@ impl eframe::App for CherryApp {
         let mut action = None;
 
         egui::Panel::top("cherry_toolbar")
-            .exact_size(48.0)
+            .exact_size(56.0)
+            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(6, 12, 28)))
             .show(ui, |ui| {
-                ui.add_space(7.0);
+                ui.add_space(9.0);
                 ui.horizontal(|ui| {
+                    if ui.button("⌂").on_hover_text("Cherry home").clicked() {
+                        action = Some(Action::Home);
+                    }
                     if ui
                         .add_enabled(self.can_go_back(), egui::Button::new("◀"))
                         .clicked()
@@ -355,19 +380,29 @@ impl eframe::App for CherryApp {
                         action = Some(Action::Reload);
                     }
 
-                    ui.strong("Cherry");
+                    ui.label(
+                        egui::RichText::new("CHERRY")
+                            .color(browser_ui::theme::BLUE)
+                            .strong(),
+                    );
+                    ui.label(egui::RichText::new("//").color(browser_ui::theme::VIOLET));
+                    ui.label(
+                        egui::RichText::new("BROWSER")
+                            .color(browser_ui::theme::TEXT)
+                            .strong(),
+                    );
 
-                    let edit_width = (ui.available_width() - 54.0).max(120.0);
+                    let edit_width = (ui.available_width() - 66.0).max(120.0);
                     let response = ui.add_sized(
-                        [edit_width, 30.0],
+                        [edit_width, 32.0],
                         egui::TextEdit::singleline(&mut self.url_input)
-                            .hint_text("https://example.com"),
+                            .hint_text("Search or enter URL"),
                     );
                     let enter = ui.input(|input| input.key_pressed(egui::Key::Enter));
                     if response.lost_focus() && enter {
                         action = Some(Action::Go);
                     }
-                    if ui.button("Go").clicked() {
+                    if ui.button("GO").clicked() {
                         action = Some(Action::Go);
                     }
                 });
@@ -377,22 +412,26 @@ impl eframe::App for CherryApp {
             .hovered_href
             .clone()
             .unwrap_or_else(|| self.status.clone());
-        let page_title = self
-            .page
-            .as_ref()
-            .map(|page| page.title.as_str())
-            .unwrap_or("CherryBrowser");
+        let page_title = if self.show_home {
+            "Cherry Browser // Home"
+        } else {
+            self.page
+                .as_ref()
+                .map(|page| page.title.as_str())
+                .unwrap_or("CherryBrowser")
+        };
 
         egui::Panel::bottom("cherry_status")
-            .exact_size(28.0)
+            .exact_size(30.0)
+            .frame(egui::Frame::default().fill(egui::Color32::from_rgb(5, 10, 23)))
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
                     if self.pending.is_some() {
                         ui.spinner();
                     }
-                    ui.small(footer_text);
+                    ui.small(egui::RichText::new(footer_text).color(browser_ui::theme::MUTED));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.small(page_title);
+                        ui.small(egui::RichText::new(page_title).color(browser_ui::theme::VIOLET));
                     });
                 });
             });
@@ -400,45 +439,54 @@ impl eframe::App for CherryApp {
         let mut clicked_href = None;
         let mut hovered_href = None;
 
-        egui::CentralPanel::default().show(ui, |ui| {
-            if let Some(page) = self.page.as_mut() {
-                let width = ui.available_width().max(320.0);
-                if (page.layout_width - width).abs() > 1.0 {
-                    page.layout = layout::layout_document_with_images(
-                        &page.dom,
-                        &page.stylesheet,
-                        &page.images,
-                        width,
-                    );
-                    page.layout_width = width;
-                }
+        egui::CentralPanel::default()
+            .frame(egui::Frame::default().fill(browser_ui::theme::BG))
+            .show(ui, |ui| {
+                if self.show_home {
+                    if browser_ui::home::show(ui, &mut self.url_input, &mut self.shell_page) {
+                        action = Some(Action::Go);
+                    }
+                } else if let Some(page) = self.page.as_mut() {
+                    let width = ui.available_width().max(320.0);
+                    if (page.layout_width - width).abs() > 1.0 {
+                        page.layout = layout::layout_document_with_images(
+                            &page.dom,
+                            &page.stylesheet,
+                            &page.images,
+                            width,
+                        );
+                        page.layout_width = width;
+                    }
 
-                let outcome =
-                    renderer::show_document(ui, &page.layout, &page.images, &mut page.textures);
-                clicked_href = outcome.clicked_href;
-                hovered_href = outcome.hovered_href;
-            } else if let Some(error) = &self.last_error {
-                ui.vertical_centered(|ui| {
-                    ui.add_space(80.0);
-                    ui.heading("CherryBrowser");
-                    ui.label(error);
-                });
-            } else {
-                ui.centered_and_justified(|ui| {
-                    ui.spinner();
-                });
-            }
-        });
+                    let outcome =
+                        renderer::show_document(ui, &page.layout, &page.images, &mut page.textures);
+                    clicked_href = outcome.clicked_href;
+                    hovered_href = outcome.hovered_href;
+                } else if let Some(error) = &self.last_error {
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(80.0);
+                        ui.heading("CherryBrowser");
+                        ui.label(error);
+                    });
+                } else {
+                    ui.centered_and_justified(|ui| {
+                        ui.spinner();
+                    });
+                }
+            });
 
         self.hovered_href = hovered_href;
 
         match action {
+            Some(Action::Home) => self.show_home(),
             Some(Action::Back) => self.go_back(),
             Some(Action::Forward) => self.go_forward(),
             Some(Action::Reload) => self.reload(),
             Some(Action::Go) => {
-                let target = self.url_input.clone();
-                self.navigate(&target, HistoryMode::Push);
+                let target = self.url_input.trim().to_string();
+                if !target.is_empty() {
+                    self.navigate(&target, HistoryMode::Push);
+                }
             }
             None => {}
         }
