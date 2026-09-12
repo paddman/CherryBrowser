@@ -18,8 +18,7 @@ use crate::{
     image_data::DecodedImage,
     layout::{self, LayoutDocument},
     loader::{self, LoadedDocument},
-    net, renderer, text_layout,
-    ui as browser_ui,
+    net, renderer, text_layout, ui as browser_ui,
 };
 
 #[derive(Debug, Clone, Copy)]
@@ -429,10 +428,7 @@ impl eframe::App for CherryApp {
                     }
                     ui.small(egui::RichText::new(footer_text).color(browser_ui::theme::MUTED));
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        ui.small(
-                            egui::RichText::new(page_title)
-                                .color(browser_ui::theme::VIOLET),
-                        );
+                        ui.small(egui::RichText::new(page_title).color(browser_ui::theme::VIOLET));
                     });
                 });
             });

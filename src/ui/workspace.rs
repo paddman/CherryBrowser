@@ -107,7 +107,15 @@ fn feature_card(
                     let x = c.x - 30.0 + i as f32 * 10.0;
                     painter.line_segment(
                         [egui::pos2(x, c.y - 23.0), egui::pos2(x + 18.0, c.y + 23.0)],
-                        egui::Stroke::new(0.7, egui::Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 90)),
+                        egui::Stroke::new(
+                            0.7,
+                            egui::Color32::from_rgba_unmultiplied(
+                                accent.r(),
+                                accent.g(),
+                                accent.b(),
+                                90,
+                            ),
+                        ),
                     );
                 }
             }
@@ -120,7 +128,10 @@ fn feature_card(
                         egui::pos2(x + 13.0, rect.bottom() - 7.0),
                     );
                     painter.rect_filled(tower, 1.0, egui::Color32::from_rgb(15, 41, 78));
-                    painter.line_segment([tower.left_top(), tower.right_top()], egui::Stroke::new(1.0, accent));
+                    painter.line_segment(
+                        [tower.left_top(), tower.right_top()],
+                        egui::Stroke::new(1.0, accent),
+                    );
                 }
             }
             _ => {
@@ -140,7 +151,12 @@ fn feature_card(
         }
         ui.add_space(7.0);
         ui.label(egui::RichText::new(tag).size(9.0).strong().color(accent));
-        ui.label(egui::RichText::new(title).size(15.0).strong().color(theme::TEXT));
+        ui.label(
+            egui::RichText::new(title)
+                .size(15.0)
+                .strong()
+                .color(theme::TEXT),
+        );
         ui.label(egui::RichText::new(body).size(10.0).color(theme::MUTED));
     });
 }
@@ -152,7 +168,11 @@ fn list_panel(ui: &mut egui::Ui, title: &str, rows: &[&str], accent: egui::Color
         ui.add_space(7.0);
         for (index, row) in rows.iter().enumerate() {
             ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(format!("{:02}", index + 1)).size(9.0).color(accent));
+                ui.label(
+                    egui::RichText::new(format!("{:02}", index + 1))
+                        .size(9.0)
+                        .color(accent),
+                );
                 ui.label(egui::RichText::new(*row).size(10.0).color(theme::TEXT));
             });
             ui.add_space(5.0);
@@ -166,7 +186,12 @@ fn security_panel(ui: &mut egui::Ui) {
         theme::section_title(ui, "Security & Privacy", "Your browsing, your control");
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("100").size(30.0).strong().color(theme::CYAN));
+            ui.label(
+                egui::RichText::new("100")
+                    .size(30.0)
+                    .strong()
+                    .color(theme::CYAN),
+            );
             ui.vertical(|ui| {
                 check(ui, "Tracking blockers active");
                 check(ui, "Encrypted connections");
@@ -175,7 +200,9 @@ fn security_panel(ui: &mut egui::Ui) {
             });
         });
         ui.add_space(6.0);
-        ui.add(egui::Button::new("View security details").fill(egui::Color32::from_rgb(22, 62, 135)));
+        ui.add(
+            egui::Button::new("View security details").fill(egui::Color32::from_rgb(22, 62, 135)),
+        );
     });
 }
 
@@ -192,7 +219,11 @@ fn recent_panel(ui: &mut egui::Ui) {
 }
 
 fn check(ui: &mut egui::Ui, text: &str) {
-    ui.label(egui::RichText::new(format!("● {text}")).size(9.0).color(theme::GOOD));
+    ui.label(
+        egui::RichText::new(format!("● {text}"))
+            .size(9.0)
+            .color(theme::GOOD),
+    );
 }
 
 fn session(ui: &mut egui::Ui, title: &str, meta: &str) {

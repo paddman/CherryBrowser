@@ -97,10 +97,19 @@ fn tab_strip(ui: &mut egui::Ui) {
             tab(ui, "New Tab", true, theme::BLUE);
             tab(ui, "Research Workspace", false, theme::CYAN);
             tab(ui, "Design Systems", false, theme::VIOLET);
-            tab(ui, "AI & Education", false, egui::Color32::from_rgb(255, 94, 171));
+            tab(
+                ui,
+                "AI & Education",
+                false,
+                egui::Color32::from_rgb(255, 94, 171),
+            );
             ui.small_button("+");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(egui::RichText::new("CHERRY / NATIVE RUST UI").size(9.0).color(theme::MUTED));
+                ui.label(
+                    egui::RichText::new("CHERRY / NATIVE RUST UI")
+                        .size(9.0)
+                        .color(theme::MUTED),
+                );
             });
         });
     });
@@ -112,11 +121,11 @@ fn tab(ui: &mut egui::Ui, text: &str, active: bool, accent: egui::Color32) {
     } else {
         egui::Color32::from_rgb(8, 18, 40)
     };
-    let button = egui::Button::new(
-        egui::RichText::new(text)
-            .size(10.0)
-            .color(if active { egui::Color32::WHITE } else { theme::MUTED }),
-    )
+    let button = egui::Button::new(egui::RichText::new(text).size(10.0).color(if active {
+        egui::Color32::WHITE
+    } else {
+        theme::MUTED
+    }))
     .fill(fill)
     .stroke(egui::Stroke::new(if active { 1.5 } else { 1.0 }, accent));
     ui.add(button);
@@ -165,24 +174,42 @@ fn hero(ui: &mut egui::Ui) {
             theme::BLUE
         };
         painter.rect_filled(tower, 1.0, egui::Color32::from_rgb(7, 27, 59));
-        painter.line_segment([tower.left_top(), tower.right_top()], egui::Stroke::new(1.2, accent));
         painter.line_segment(
-            [egui::pos2(tower.center().x, horizon + 3.0), egui::pos2(tower.center().x, rect.bottom() - 5.0)],
-            egui::Stroke::new(0.7, egui::Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 80)),
+            [tower.left_top(), tower.right_top()],
+            egui::Stroke::new(1.2, accent),
+        );
+        painter.line_segment(
+            [
+                egui::pos2(tower.center().x, horizon + 3.0),
+                egui::pos2(tower.center().x, rect.bottom() - 5.0),
+            ],
+            egui::Stroke::new(
+                0.7,
+                egui::Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 80),
+            ),
         );
     }
 
     // Network globe on the right.
-    let center = egui::pos2(rect.right() - rect.width() * 0.19, rect.top() + rect.height() * 0.42);
+    let center = egui::pos2(
+        rect.right() - rect.width() * 0.19,
+        rect.top() + rect.height() * 0.42,
+    );
     let radius = (height * 0.25).min(width * 0.13);
     painter.circle_stroke(center, radius, egui::Stroke::new(1.5, theme::BLUE));
     painter.circle_stroke(center, radius * 0.68, egui::Stroke::new(1.0, grid));
     painter.line_segment(
-        [egui::pos2(center.x - radius, center.y), egui::pos2(center.x + radius, center.y)],
+        [
+            egui::pos2(center.x - radius, center.y),
+            egui::pos2(center.x + radius, center.y),
+        ],
         egui::Stroke::new(1.0, grid),
     );
     painter.line_segment(
-        [egui::pos2(center.x, center.y - radius), egui::pos2(center.x, center.y + radius)],
+        [
+            egui::pos2(center.x, center.y - radius),
+            egui::pos2(center.x, center.y + radius),
+        ],
         egui::Stroke::new(1.0, grid),
     );
     let nodes = [

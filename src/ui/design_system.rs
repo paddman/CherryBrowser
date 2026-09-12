@@ -5,7 +5,11 @@ use super::theme;
 pub fn show(ui: &mut egui::Ui) {
     theme::card().show(ui, |ui| {
         ui.set_min_height(184.0);
-        theme::section_title(ui, "Customize Experience", "Themes · Layout · Design System");
+        theme::section_title(
+            ui,
+            "Customize Experience",
+            "Themes · Layout · Design System",
+        );
         ui.add_space(9.0);
 
         ui.horizontal_wrapped(|ui| {
