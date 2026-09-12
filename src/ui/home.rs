@@ -23,7 +23,7 @@ pub fn show(ui: &mut egui::Ui, url_input: &mut String) -> bool {
                 ui.allocate_ui_with_layout(
                     egui::vec2(left_w, 560.0),
                     egui::Layout::top_down(egui::Align::Min),
-                    |ui| sidebar::show(ui),
+                    sidebar::show,
                 );
 
                 ui.add_space(6.0);
@@ -56,7 +56,7 @@ pub fn show(ui: &mut egui::Ui, url_input: &mut String) -> bool {
                 ui.allocate_ui_with_layout(
                     egui::vec2(right_w, 560.0),
                     egui::Layout::top_down(egui::Align::Min),
-                    |ui| assistant::show(ui),
+                    assistant::show,
                 );
             });
 
@@ -103,7 +103,7 @@ fn tab_strip(ui: &mut egui::Ui) {
                 false,
                 egui::Color32::from_rgb(255, 94, 171),
             );
-            ui.small_button("+");
+            let _ = ui.small_button("+");
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(
                     egui::RichText::new("CHERRY / NATIVE RUST UI")
