@@ -58,6 +58,7 @@ pub struct CherryApp {
     native_metrics_installed: bool,
     system_font_count: usize,
     show_home: bool,
+    shell_page: browser_ui::ShellPage,
 }
 
 impl CherryApp {
@@ -77,6 +78,7 @@ impl CherryApp {
             native_metrics_installed: false,
             system_font_count,
             show_home: true,
+            shell_page: browser_ui::ShellPage::NewTab,
         }
     }
 
@@ -119,6 +121,7 @@ impl CherryApp {
             pending.cancel.cancel();
         }
         self.show_home = true;
+        self.shell_page = browser_ui::ShellPage::NewTab;
         self.hovered_href = None;
         self.last_error = None;
         self.url_input.clear();
@@ -440,7 +443,7 @@ impl eframe::App for CherryApp {
             .frame(egui::Frame::default().fill(browser_ui::theme::BG))
             .show(ui, |ui| {
                 if self.show_home {
-                    if browser_ui::home::show(ui, &mut self.url_input) {
+                    if browser_ui::home::show(ui, &mut self.url_input, &mut self.shell_page) {
                         action = Some(Action::Go);
                     }
                 } else if let Some(page) = self.page.as_mut() {

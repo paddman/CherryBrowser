@@ -178,7 +178,12 @@ fn insight_card(ui: &mut egui::Ui, number: &str, title: &str, body: &str, accent
         .inner_margin(egui::Margin::same(8))
         .show(ui, |ui| {
             ui.label(egui::RichText::new(number).size(9.0).strong().color(accent));
-            ui.label(egui::RichText::new(title).size(11.0).strong().color(theme::TEXT));
+            ui.label(
+                egui::RichText::new(title)
+                    .size(11.0)
+                    .strong()
+                    .color(theme::TEXT),
+            );
             ui.label(egui::RichText::new(body).size(9.0).color(theme::MUTED));
         });
 }
@@ -208,7 +213,8 @@ fn row(ui: &mut egui::Ui, title: &str, meta: &str, accent: egui::Color32) {
 }
 
 fn mini_page(ui: &mut egui::Ui, title: &str, accent: egui::Color32) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 70.0), egui::Sense::hover());
+    let (rect, _) =
+        ui.allocate_exact_size(egui::vec2(ui.available_width(), 70.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
     painter.rect_filled(rect, 5.0, egui::Color32::from_rgb(5, 15, 34));
     painter.rect_filled(

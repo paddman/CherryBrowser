@@ -60,12 +60,27 @@ fn appearance_panel(ui: &mut egui::Ui) {
         });
         ui.add_space(6.0);
         ui.columns(2, |cols| {
-            theme_card(&mut cols[0], "Midnight", egui::Color32::from_rgb(16, 26, 53), false);
-            theme_card(&mut cols[1], "Snow", egui::Color32::from_rgb(225, 234, 247), false);
+            theme_card(
+                &mut cols[0],
+                "Midnight",
+                egui::Color32::from_rgb(16, 26, 53),
+                false,
+            );
+            theme_card(
+                &mut cols[1],
+                "Snow",
+                egui::Color32::from_rgb(225, 234, 247),
+                false,
+            );
         });
 
         ui.add_space(10.0);
-        ui.label(egui::RichText::new("COLOR TOKENS").size(9.0).strong().color(theme::MUTED));
+        ui.label(
+            egui::RichText::new("COLOR TOKENS")
+                .size(9.0)
+                .strong()
+                .color(theme::MUTED),
+        );
         color_token(ui, "Primary", theme::BLUE, "#3E94FF");
         color_token(ui, "Accent", theme::VIOLET, "#935CFF");
         color_token(ui, "Surface", theme::PANEL, "#070F22");
@@ -88,9 +103,21 @@ fn preview_panel(ui: &mut egui::Ui) {
             7.0,
             egui::Color32::from_rgb(10, 25, 55),
         );
-        painter.circle_filled(egui::pos2(rect.left() + 13.0, rect.top() + 13.0), 3.5, egui::Color32::from_rgb(250, 96, 116));
-        painter.circle_filled(egui::pos2(rect.left() + 25.0, rect.top() + 13.0), 3.5, egui::Color32::from_rgb(255, 193, 87));
-        painter.circle_filled(egui::pos2(rect.left() + 37.0, rect.top() + 13.0), 3.5, theme::GOOD);
+        painter.circle_filled(
+            egui::pos2(rect.left() + 13.0, rect.top() + 13.0),
+            3.5,
+            egui::Color32::from_rgb(250, 96, 116),
+        );
+        painter.circle_filled(
+            egui::pos2(rect.left() + 25.0, rect.top() + 13.0),
+            3.5,
+            egui::Color32::from_rgb(255, 193, 87),
+        );
+        painter.circle_filled(
+            egui::pos2(rect.left() + 37.0, rect.top() + 13.0),
+            3.5,
+            theme::GOOD,
+        );
 
         let horizon = rect.bottom() - 25.0;
         for i in 0..15 {
@@ -101,7 +128,17 @@ fn preview_panel(ui: &mut egui::Ui) {
                 egui::pos2((x + 12.0).min(rect.right() - 4.0), horizon),
             );
             painter.rect_filled(tower, 1.0, egui::Color32::from_rgb(9, 33, 70));
-            painter.line_segment([tower.left_top(), tower.right_top()], egui::Stroke::new(1.0, if i % 2 == 0 { theme::BLUE } else { theme::VIOLET }));
+            painter.line_segment(
+                [tower.left_top(), tower.right_top()],
+                egui::Stroke::new(
+                    1.0,
+                    if i % 2 == 0 {
+                        theme::BLUE
+                    } else {
+                        theme::VIOLET
+                    },
+                ),
+            );
         }
         painter.text(
             egui::pos2(rect.left() + 18.0, rect.top() + 48.0),
@@ -115,7 +152,12 @@ fn preview_panel(ui: &mut egui::Ui) {
             egui::pos2(rect.right() - 18.0, rect.top() + 116.0),
         );
         painter.rect_filled(search, 16.0, egui::Color32::from_rgb(16, 39, 82));
-        painter.rect_stroke(search, 16.0, egui::Stroke::new(1.0, theme::BLUE), egui::StrokeKind::Inside);
+        painter.rect_stroke(
+            search,
+            16.0,
+            egui::Stroke::new(1.0, theme::BLUE),
+            egui::StrokeKind::Inside,
+        );
         painter.text(
             egui::pos2(search.left() + 14.0, search.center().y),
             egui::Align2::LEFT_CENTER,
@@ -137,7 +179,11 @@ fn preview_panel(ui: &mut egui::Ui) {
 fn profile_panel(ui: &mut egui::Ui) {
     theme::card().show(ui, |ui| {
         ui.set_min_height(155.0);
-        theme::section_title(ui, "Profiles", "Separate work, research and personal context");
+        theme::section_title(
+            ui,
+            "Profiles",
+            "Separate work, research and personal context",
+        );
         ui.add_space(8.0);
         profile(ui, "Personal", "Synced", theme::BLUE);
         profile(ui, "Work", "Local", theme::VIOLET);
@@ -156,7 +202,11 @@ fn privacy_panel(ui: &mut egui::Ui) {
         let _ = ui.checkbox(&mut trackers, "Block trackers");
         let _ = ui.checkbox(&mut cookies, "Clear cookies on exit");
         let _ = ui.checkbox(&mut diagnostics, "Send diagnostic data");
-        ui.label(egui::RichText::new("No hidden behavioral profile in this concept.").size(8.5).color(theme::MUTED));
+        ui.label(
+            egui::RichText::new("No hidden behavioral profile in this concept.")
+                .size(8.5)
+                .color(theme::MUTED),
+        );
     });
 }
 
@@ -180,7 +230,8 @@ fn theme_card(ui: &mut egui::Ui, name: &str, accent: egui::Color32, selected: bo
         .corner_radius(egui::CornerRadius::same(6))
         .inner_margin(egui::Margin::same(7))
         .show(ui, |ui| {
-            let (rect, _) = ui.allocate_exact_size(egui::vec2(ui.available_width(), 52.0), egui::Sense::hover());
+            let (rect, _) = ui
+                .allocate_exact_size(egui::vec2(ui.available_width(), 52.0), egui::Sense::hover());
             let painter = ui.painter_at(rect);
             painter.rect_filled(rect, 5.0, egui::Color32::from_rgb(5, 14, 32));
             painter.rect_filled(

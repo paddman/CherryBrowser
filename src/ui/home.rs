@@ -1,6 +1,6 @@
 use eframe::egui;
 
-use super::{assistant, design_system, research, settings, sidebar, theme, workspace, ShellPage};
+use super::{ShellPage, assistant, design_system, research, settings, sidebar, theme, workspace};
 
 /// Render the first-party CherryBrowser shell.
 /// Returns true when the user submits the home URL field.
@@ -18,7 +18,11 @@ pub fn show(ui: &mut egui::Ui, url_input: &mut String, page: &mut ShellPage) -> 
             let right_w = 270.0;
             let gap_budget = 28.0;
             let center_w = (available - left_w - right_w - gap_budget).max(420.0);
-            let shell_height = if *page == ShellPage::NewTab { 560.0 } else { 720.0 };
+            let shell_height = if *page == ShellPage::NewTab {
+                560.0
+            } else {
+                720.0
+            };
 
             ui.horizontal_top(|ui| {
                 ui.allocate_ui_with_layout(
