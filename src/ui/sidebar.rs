@@ -67,7 +67,7 @@ pub fn show(ui: &mut egui::Ui) {
                     .color(theme::MUTED),
             );
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.small_button("+");
+                let _ = ui.small_button("+");
             });
         });
         ui.add_space(5.0);
