@@ -1,0 +1,61 @@
+name: Wire Cherry shell state
+
+on:
+  push:
+    branches:
+      - ui/cyrvor-graphics
+
+permissions:
+  contents: write
+
+jobs:
+  wire:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: Wire ShellPage into CherryApp
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('src/app.rs')
+          s = p.read_text()
+          old = "    show_home: bool,\n}"
+          new = "    show_home: bool,\n    shell_page: browser_ui::ShellPage,\n}"
+          if old not in s:
+              raise SystemExit('CherryApp field anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "            show_home: true,\n        }"
+          new = "            show_home: true,\n            shell_page: browser_ui::ShellPage::NewTab,\n        }"
+          if old not in s:
+              raise SystemExit('CherryApp initializer anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "        self.show_home = true;\n        self.hovered_href = None;"
+          new = "        self.show_home = true;\n        self.shell_page = browser_ui::ShellPage::NewTab;\n        self.hovered_href = None;"
+          if old not in s:
+              raise SystemExit('show_home anchor not found')
+          s = s.replace(old, new, 1)
+
+          old = "                    if browser_ui::home::show(ui, &mut self.url_input) {"
+          new = "                    if browser_ui::home::show(ui, &mut self.url_input, &mut self.shell_page) {"
+          if old not in s:
+              raise SystemExit('home render anchor not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+          cargo fmt --all
+          git rm .github/workflows/wire-shell-state.yml
+      - name: Commit routed shell
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src .github/workflows/wire-shell-state.yml
+          git commit -m "Wire multi-screen CherryBrowser shell state"
+          git push origin HEAD:ui/cyrvor-graphics
