@@ -11,7 +11,7 @@ pub fn show(ui: &mut egui::Ui) {
             ui.label(egui::RichText::new("CHERRY AI").strong().color(theme::TEXT));
             ui.label(egui::RichText::new("●").color(theme::GOOD));
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.small_button("⋯");
+                let _ = ui.small_button("⋯");
             });
         });
         ui.label(
