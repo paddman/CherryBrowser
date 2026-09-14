@@ -43,6 +43,9 @@ pub fn section_title(ui: &mut egui::Ui, title: &str, subtitle: &str) {
 }
 
 pub fn primary_button(ui: &mut egui::Ui, label: &str) -> bool {
-    ui.add(egui::Button::new(egui::RichText::new(label).color(TEXT)).fill(egui::Color32::from_rgb(38, 80, 148)))
-        .clicked()
+    ui.add(
+        egui::Button::new(egui::RichText::new(label).color(TEXT))
+            .fill(egui::Color32::from_rgb(38, 80, 148)),
+    )
+    .clicked()
 }

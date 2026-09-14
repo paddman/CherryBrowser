@@ -1,6 +1,10 @@
 use eframe::egui;
 
-use super::{Action, model::{SearchProvider, Workspace}, theme};
+use super::{
+    Action,
+    model::{SearchProvider, Workspace},
+    theme,
+};
 
 pub fn show(ui: &mut egui::Ui, state: &mut Workspace) -> Option<Action> {
     let mut action = None;

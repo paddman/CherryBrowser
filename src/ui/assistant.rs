@@ -37,17 +37,48 @@ fn mascot(ui: &mut egui::Ui) {
     let hair = egui::Color32::from_rgb(43, 91, 176);
     let skin = egui::Color32::from_rgb(245, 216, 205);
     // Short blue bob, white-and-blue jacket; no fruit, shield, key or padlock motifs.
-    painter.rect_filled(egui::Rect::from_center_size(center + egui::vec2(0.0, -6.0), egui::vec2(79.0, 77.0)), 27.0, hair);
+    painter.rect_filled(
+        egui::Rect::from_center_size(center + egui::vec2(0.0, -6.0), egui::vec2(79.0, 77.0)),
+        27.0,
+        hair,
+    );
     let face = center + egui::vec2(0.0, -5.0);
     painter.circle_filled(face, 28.0, skin);
-    painter.add(egui::Shape::convex_polygon(vec![face + egui::vec2(-34.0, -8.0), face + egui::vec2(-25.0, -35.0), face + egui::vec2(10.0, -39.0), face + egui::vec2(29.0, -24.0), face + egui::vec2(-3.0, -12.0), face + egui::vec2(-9.0, 0.0)], hair, egui::Stroke::NONE));
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            face + egui::vec2(-34.0, -8.0),
+            face + egui::vec2(-25.0, -35.0),
+            face + egui::vec2(10.0, -39.0),
+            face + egui::vec2(29.0, -24.0),
+            face + egui::vec2(-3.0, -12.0),
+            face + egui::vec2(-9.0, 0.0),
+        ],
+        hair,
+        egui::Stroke::NONE,
+    ));
     for dx in [-10.0, 11.0] {
         painter.circle_filled(face + egui::vec2(dx, 3.0), 4.0, egui::Color32::WHITE);
         painter.circle_filled(face + egui::vec2(dx, 4.0), 2.5, theme::BLUE);
     }
-    painter.line_segment([face + egui::vec2(-5.0, 15.0), face + egui::vec2(5.0, 15.0)], egui::Stroke::new(1.4, egui::Color32::from_rgb(168, 101, 109)));
-    let jacket = egui::Rect::from_center_size(center + egui::vec2(0.0, 50.0), egui::vec2(101.0, 46.0));
+    painter.line_segment(
+        [face + egui::vec2(-5.0, 15.0), face + egui::vec2(5.0, 15.0)],
+        egui::Stroke::new(1.4, egui::Color32::from_rgb(168, 101, 109)),
+    );
+    let jacket =
+        egui::Rect::from_center_size(center + egui::vec2(0.0, 50.0), egui::vec2(101.0, 46.0));
     painter.rect_filled(jacket, 16.0, theme::TEXT);
-    painter.line_segment([jacket.left_top() + egui::vec2(18.0, 5.0), jacket.center_bottom() - egui::vec2(0.0, 4.0)], egui::Stroke::new(4.0, theme::BLUE));
-    painter.line_segment([jacket.right_top() + egui::vec2(-18.0, 5.0), jacket.center_bottom() - egui::vec2(0.0, 4.0)], egui::Stroke::new(4.0, theme::VIOLET));
+    painter.line_segment(
+        [
+            jacket.left_top() + egui::vec2(18.0, 5.0),
+            jacket.center_bottom() - egui::vec2(0.0, 4.0),
+        ],
+        egui::Stroke::new(4.0, theme::BLUE),
+    );
+    painter.line_segment(
+        [
+            jacket.right_top() + egui::vec2(-18.0, 5.0),
+            jacket.center_bottom() - egui::vec2(0.0, 4.0),
+        ],
+        egui::Stroke::new(4.0, theme::VIOLET),
+    );
 }

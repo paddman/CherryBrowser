@@ -1,6 +1,10 @@
 use eframe::egui;
 
-use super::{Action, model::{MAX_NOTE_CHARS, Workspace}, theme};
+use super::{
+    Action,
+    model::{MAX_NOTE_CHARS, Workspace},
+    theme,
+};
 
 pub fn show(ui: &mut egui::Ui, state: &mut Workspace, current_url: Option<&str>) -> Option<Action> {
     let mut action = None;

@@ -167,12 +167,18 @@ impl CherryApp {
             Some(pending) => match pending.receiver.try_recv() {
                 Ok(result) => Some(result),
                 Err(TryRecvError::Empty) => None,
-                Err(TryRecvError::Disconnected) => Some(Err("network worker stopped unexpectedly".to_string())),
+                Err(TryRecvError::Disconnected) => {
+                    Some(Err("network worker stopped unexpectedly".to_string()))
+                }
             },
             None => None,
         };
-        let Some(result) = result else { return; };
-        let Some(pending) = self.pending.take() else { return; };
+        let Some(result) = result else {
+            return;
+        };
+        let Some(pending) = self.pending.take() else {
+            return;
+        };
         match result {
             Ok(loaded) => self.install_response(loaded, pending.history_mode),
             Err(error) => {
@@ -199,8 +205,14 @@ impl CherryApp {
             let escaped = escape_html(&response.body);
             html::parse(&format!("<html><body><pre>{escaped}</pre></body></html>"))
         } else {
-            let message = format!("CherryBrowser milestone 0.3.4 cannot render content type {} yet.", response.content_type);
-            html::parse(&format!("<html><body><h1>Unsupported content</h1><p>{}</p></body></html>", escape_html(&message)))
+            let message = format!(
+                "CherryBrowser milestone 0.3.4 cannot render content type {} yet.",
+                response.content_type
+            );
+            html::parse(&format!(
+                "<html><body><h1>Unsupported content</h1><p>{}</p></body></html>",
+                escape_html(&message)
+            ))
         };
         let stylesheet = css::parse_stylesheet(&stylesheet_source);
         let title = document_title(&dom).unwrap_or_else(|| response.final_url.clone());
@@ -211,15 +223,32 @@ impl CherryApp {
         self.url_input = response.final_url.clone();
         self.show_home = false;
         self.status = if resource_warnings.is_empty() {
-            format!("HTTP {} · {} · CSS {} · IMG {} · FONT {} · Cherry Engine", response.status, response.content_type, external_stylesheets, image_count, self.system_font_count)
+            format!(
+                "HTTP {} · {} · CSS {} · IMG {} · FONT {} · Cherry Engine",
+                response.status,
+                response.content_type,
+                external_stylesheets,
+                image_count,
+                self.system_font_count
+            )
         } else {
-            format!("HTTP {} · {} · CSS {} · IMG {} · FONT {} · {} resource warning(s)", response.status, response.content_type, external_stylesheets, image_count, self.system_font_count, resource_warnings.len())
+            format!(
+                "HTTP {} · {} · CSS {} · IMG {} · FONT {} · {} resource warning(s)",
+                response.status,
+                response.content_type,
+                external_stylesheets,
+                image_count,
+                self.system_font_count,
+                resource_warnings.len()
+            )
         };
         self.last_error = None;
         self.retry_target = None;
         if self.recent_urls.last() != Some(&response.final_url) {
             self.recent_urls.push(response.final_url.clone());
-            if self.recent_urls.len() > MAX_HISTORY { self.recent_urls.remove(0); }
+            if self.recent_urls.len() > MAX_HISTORY {
+                self.recent_urls.remove(0);
+            }
         }
         match history_mode {
             HistoryMode::Push => self.push_history(response.final_url.clone()),
@@ -240,23 +269,37 @@ impl CherryApp {
     }
 
     fn push_history(&mut self, url: String) {
-        if let Some(pos) = self.history_pos { self.history.truncate(pos + 1); }
-        if self.history.last() != Some(&url) { self.history.push(url); }
-        if self.history.len() > MAX_HISTORY { self.history.remove(0); }
+        if let Some(pos) = self.history_pos {
+            self.history.truncate(pos + 1);
+        }
+        if self.history.last() != Some(&url) {
+            self.history.push(url);
+        }
+        if self.history.len() > MAX_HISTORY {
+            self.history.remove(0);
+        }
         self.history_pos = self.history.len().checked_sub(1);
     }
 
     fn go_back(&mut self) {
-        let Some(pos) = self.history_pos else { return; };
-        if pos == 0 { return; }
+        let Some(pos) = self.history_pos else {
+            return;
+        };
+        if pos == 0 {
+            return;
+        }
         let next_pos = pos - 1;
         let url = self.history[next_pos].clone();
         self.navigate(&url, HistoryMode::Traverse(next_pos));
     }
 
     fn go_forward(&mut self) {
-        let Some(pos) = self.history_pos else { return; };
-        if pos + 1 >= self.history.len() { return; }
+        let Some(pos) = self.history_pos else {
+            return;
+        };
+        if pos + 1 >= self.history.len() {
+            return;
+        }
         let next_pos = pos + 1;
         let url = self.history[next_pos].clone();
         self.navigate(&url, HistoryMode::Traverse(next_pos));
@@ -272,7 +315,11 @@ impl CherryApp {
     }
 
     fn open_href(&mut self, href: &str) {
-        let base = self.page.as_ref().map(|page| page.base_url.as_str()).unwrap_or(self.current_url.as_str());
+        let base = self
+            .page
+            .as_ref()
+            .map(|page| page.base_url.as_str())
+            .unwrap_or(self.current_url.as_str());
         match net::resolve_url(base, href) {
             Ok(url) => self.navigate(&url, HistoryMode::Push),
             Err(error) => {
@@ -282,10 +329,13 @@ impl CherryApp {
         }
     }
 
-    fn can_go_back(&self) -> bool { self.history_pos.is_some_and(|pos| pos > 0) }
+    fn can_go_back(&self) -> bool {
+        self.history_pos.is_some_and(|pos| pos > 0)
+    }
 
     fn can_go_forward(&self) -> bool {
-        self.history_pos.is_some_and(|pos| pos + 1 < self.history.len())
+        self.history_pos
+            .is_some_and(|pos| pos + 1 < self.history.len())
     }
 
     fn page_ready(&self) -> bool {
@@ -301,12 +351,16 @@ impl CherryApp {
             Action::Reload => self.reload(),
             Action::Stop => {
                 self.resume();
-                self.status = "Loading stopped. Returned to the last completed page or workspace.".into();
+                self.status =
+                    "Loading stopped. Returned to the last completed page or workspace.".into();
             }
             Action::Resume => self.resume(),
             Action::Open(url) => self.navigate(&url, HistoryMode::Push),
             Action::Go => {
-                match browser_ui::model::navigation_target(&self.url_input, self.workspace.data.search_provider) {
+                match browser_ui::model::navigation_target(
+                    &self.url_input,
+                    self.workspace.data.search_provider,
+                ) {
                     Ok(target) => self.navigate(&target, HistoryMode::Push),
                     Err(error) => {
                         self.cancel_pending();
@@ -319,7 +373,9 @@ impl CherryApp {
                 }
             }
             Action::Bookmark => {
-                if self.page_ready() && let Some(page) = self.page.as_ref() {
+                if self.page_ready()
+                    && let Some(page) = self.page.as_ref()
+                {
                     if let Err(error) = self.workspace.bookmark(&page.title, &self.current_url) {
                         self.workspace.notice = Some(error);
                     }
@@ -332,7 +388,9 @@ impl CherryApp {
             }
             Action::ClearHistory => {
                 // Do not allow an in-flight traversal to commit a now-invalid index.
-                if self.pending.is_some() { self.resume(); }
+                if self.pending.is_some() {
+                    self.resume();
+                }
                 self.history.clear();
                 self.history_pos = None;
                 self.recent_urls.clear();
@@ -342,35 +400,52 @@ impl CherryApp {
     }
 
     fn ensure_native_text_metrics(&mut self, ui: &egui::Ui) {
-        if self.native_metrics_installed { return; }
+        if self.native_metrics_installed {
+            return;
+        }
         let context = ui.ctx().clone();
         text_layout::set_text_measurer(Arc::new(move |text, font_size, monospace| {
-            let family = if monospace { egui::FontFamily::Monospace } else { egui::FontFamily::Proportional };
+            let family = if monospace {
+                egui::FontFamily::Monospace
+            } else {
+                egui::FontFamily::Proportional
+            };
             let font = egui::FontId::new(font_size, family);
             context.fonts_mut(|fonts| {
-                fonts.layout_no_wrap(text.to_owned(), font, egui::Color32::WHITE).size().x
+                fonts
+                    .layout_no_wrap(text.to_owned(), font, egui::Color32::WHITE)
+                    .size()
+                    .x
             })
         }));
         self.native_metrics_installed = true;
-        if let Some(page) = self.page.as_mut() { page.layout_width = 0.0; }
+        if let Some(page) = self.page.as_mut() {
+            page.layout_width = 0.0;
+        }
     }
 }
 
 impl Drop for CherryApp {
-    fn drop(&mut self) { self.cancel_pending(); }
+    fn drop(&mut self) {
+        self.cancel_pending();
+    }
 }
 
 impl eframe::App for CherryApp {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.poll_navigation();
-        if self.pending.is_some() { ctx.request_repaint_after(Duration::from_millis(40)); }
+        if self.pending.is_some() {
+            ctx.request_repaint_after(Duration::from_millis(40));
+        }
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         self.ensure_native_text_metrics(ui);
         let ctx = ui.ctx().clone();
         let mut action = None;
-        if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::K)) { self.palette.toggle(); }
+        if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::K)) {
+            self.palette.toggle();
+        }
         if ctx.input_mut(|input| input.consume_key(egui::Modifiers::COMMAND, egui::Key::L)) {
             self.palette.open = false;
             self.focus_address = true;
@@ -379,67 +454,186 @@ impl eframe::App for CherryApp {
             for (modifiers, key, next) in [
                 (egui::Modifiers::COMMAND, egui::Key::R, Action::Reload),
                 (egui::Modifiers::COMMAND, egui::Key::D, Action::Bookmark),
-                (egui::Modifiers::COMMAND, egui::Key::H, Action::Section(ShellPage::History)),
-                (egui::Modifiers::COMMAND, egui::Key::B, Action::Section(ShellPage::Bookmarks)),
+                (
+                    egui::Modifiers::COMMAND,
+                    egui::Key::H,
+                    Action::Section(ShellPage::History),
+                ),
+                (
+                    egui::Modifiers::COMMAND,
+                    egui::Key::B,
+                    Action::Section(ShellPage::Bookmarks),
+                ),
                 (egui::Modifiers::ALT, egui::Key::ArrowLeft, Action::Back),
                 (egui::Modifiers::ALT, egui::Key::ArrowRight, Action::Forward),
                 (egui::Modifiers::NONE, egui::Key::F5, Action::Reload),
             ] {
-                if ctx.input_mut(|input| input.consume_key(modifiers, key)) { action = Some(next); }
+                if ctx.input_mut(|input| input.consume_key(modifiers, key)) {
+                    action = Some(next);
+                }
             }
-            if self.pending.is_some() && ctx.input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) { action = Some(Action::Stop); }
+            if self.pending.is_some()
+                && ctx
+                    .input_mut(|input| input.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+            {
+                action = Some(Action::Stop);
+            }
         }
         let ready = self.page_ready();
-        if let Some(next) = self.palette.show(&ctx, ready, self.workspace.can_save() && self.workspace.dirty) { action = Some(next); }
+        if let Some(next) = self.palette.show(
+            &ctx,
+            ready,
+            self.workspace.can_save() && self.workspace.dirty,
+        ) {
+            action = Some(next);
+        }
 
         egui::Panel::top("cherry_toolbar")
             .exact_size(94.0)
-            .frame(egui::Frame::default().fill(browser_ui::theme::PANEL).inner_margin(egui::Margin::symmetric(12, 8)))
+            .frame(
+                egui::Frame::default()
+                    .fill(browser_ui::theme::PANEL)
+                    .inner_margin(egui::Margin::symmetric(12, 8)),
+            )
             .show(ui, |ui| {
                 ui.spacing_mut().item_spacing = egui::vec2(6.0, 6.0);
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("CHERRY").size(15.0).strong().color(browser_ui::theme::BLUE));
+                    ui.label(
+                        egui::RichText::new("CHERRY")
+                            .size(15.0)
+                            .strong()
+                            .color(browser_ui::theme::BLUE),
+                    );
                     if ui.available_width() > 650.0 {
-                        let title = if self.show_home { self.shell_page.label() } else { self.page.as_ref().map(|page| page.title.as_str()).unwrap_or("Browser") };
+                        let title = if self.show_home {
+                            self.shell_page.label()
+                        } else {
+                            self.page
+                                .as_ref()
+                                .map(|page| page.title.as_str())
+                                .unwrap_or("Browser")
+                        };
                         let title: String = title.chars().take(48).collect();
                         ui.label(egui::RichText::new(title).color(browser_ui::theme::MUTED));
                     }
                     ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                        if ui.button("Commands").on_hover_text("Ctrl/Cmd+K").clicked() { self.palette.toggle(); }
-                        if ui.add_enabled(self.workspace.dirty && self.workspace.can_save(), egui::Button::new("Save")).on_hover_text("Save bookmarks, notes and appearance locally").clicked() { action = Some(Action::SaveWorkspace); }
-                        if ui.available_width() > 200.0 && ui.add_enabled(ready, egui::Button::new("Bookmark page")).on_hover_text("Ctrl/Cmd+D — saves the last completed page").clicked() { action = Some(Action::Bookmark); }
+                        if ui.button("Commands").on_hover_text("Ctrl/Cmd+K").clicked() {
+                            self.palette.toggle();
+                        }
+                        if ui
+                            .add_enabled(
+                                self.workspace.dirty && self.workspace.can_save(),
+                                egui::Button::new("Save"),
+                            )
+                            .on_hover_text("Save bookmarks, notes and appearance locally")
+                            .clicked()
+                        {
+                            action = Some(Action::SaveWorkspace);
+                        }
+                        if ui.available_width() > 200.0
+                            && ui
+                                .add_enabled(ready, egui::Button::new("Bookmark page"))
+                                .on_hover_text("Ctrl/Cmd+D — saves the last completed page")
+                                .clicked()
+                        {
+                            action = Some(Action::Bookmark);
+                        }
                     });
                 });
                 ui.horizontal(|ui| {
-                    if ui.button("⌂").on_hover_text("New Tab workspace").clicked() { action = Some(Action::Home); }
-                    if ui.add_enabled(self.can_go_back(), egui::Button::new("◀")).on_hover_text("Back · Alt+Left").clicked() { action = Some(Action::Back); }
-                    if ui.add_enabled(self.can_go_forward(), egui::Button::new("▶")).on_hover_text("Forward · Alt+Right").clicked() { action = Some(Action::Forward); }
+                    if ui.button("⌂").on_hover_text("New Tab workspace").clicked() {
+                        action = Some(Action::Home);
+                    }
+                    if ui
+                        .add_enabled(self.can_go_back(), egui::Button::new("◀"))
+                        .on_hover_text("Back · Alt+Left")
+                        .clicked()
+                    {
+                        action = Some(Action::Back);
+                    }
+                    if ui
+                        .add_enabled(self.can_go_forward(), egui::Button::new("▶"))
+                        .on_hover_text("Forward · Alt+Right")
+                        .clicked()
+                    {
+                        action = Some(Action::Forward);
+                    }
                     if self.pending.is_some() {
-                        if ui.button("Stop").on_hover_text("Stop loading · Esc").clicked() { action = Some(Action::Stop); }
-                    } else if ui.add_enabled(!self.show_home && (self.page.is_some() || self.retry_target.is_some()), egui::Button::new("↻")).on_hover_text("Reload or retry · Ctrl/Cmd+R").clicked() { action = Some(Action::Reload); }
+                        if ui
+                            .button("Stop")
+                            .on_hover_text("Stop loading · Esc")
+                            .clicked()
+                        {
+                            action = Some(Action::Stop);
+                        }
+                    } else if ui
+                        .add_enabled(
+                            !self.show_home && (self.page.is_some() || self.retry_target.is_some()),
+                            egui::Button::new("↻"),
+                        )
+                        .on_hover_text("Reload or retry · Ctrl/Cmd+R")
+                        .clicked()
+                    {
+                        action = Some(Action::Reload);
+                    }
                     let edit_width = (ui.available_width() - 46.0).max(20.0);
-                    let response = ui.add_sized([edit_width, 32.0], egui::TextEdit::singleline(&mut self.url_input).id(egui::Id::new("address_bar")).hint_text("URL or search · Ctrl/Cmd+L").char_limit(4096));
+                    let response = ui.add_sized(
+                        [edit_width, 32.0],
+                        egui::TextEdit::singleline(&mut self.url_input)
+                            .id(egui::Id::new("address_bar"))
+                            .hint_text("URL or search · Ctrl/Cmd+L")
+                            .char_limit(4096),
+                    );
                     if self.focus_address {
                         response.request_focus();
                         if let Some(mut state) = egui::TextEdit::load_state(&ctx, response.id) {
-                            state.cursor.set_char_range(Some(egui::text::CCursorRange::two(egui::text::CCursor::new(0), egui::text::CCursor::new(self.url_input.chars().count()))));
+                            state
+                                .cursor
+                                .set_char_range(Some(egui::text::CCursorRange::two(
+                                    egui::text::CCursor::new(0),
+                                    egui::text::CCursor::new(self.url_input.chars().count()),
+                                )));
                             state.store(&ctx, response.id);
                         }
                         self.focus_address = false;
                     }
-                    if response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter)) { action = Some(Action::Go); }
-                    if ui.button("Go").clicked() { action = Some(Action::Go); }
+                    if response.lost_focus()
+                        && ui.input(|input| input.key_pressed(egui::Key::Enter))
+                    {
+                        action = Some(Action::Go);
+                    }
+                    if ui.button("Go").clicked() {
+                        action = Some(Action::Go);
+                    }
                 });
             });
 
-        let footer = self.hovered_href.clone().unwrap_or_else(|| self.status.clone());
+        let footer = self
+            .hovered_href
+            .clone()
+            .unwrap_or_else(|| self.status.clone());
         egui::Panel::bottom("cherry_status")
             .exact_size(30.0)
-            .frame(egui::Frame::default().fill(browser_ui::theme::BG).inner_margin(egui::Margin::symmetric(12, 4)))
+            .frame(
+                egui::Frame::default()
+                    .fill(browser_ui::theme::BG)
+                    .inner_margin(egui::Margin::symmetric(12, 4)),
+            )
             .show(ui, |ui| {
                 ui.horizontal(|ui| {
-                    if self.pending.is_some() { ui.spinner(); }
-                    ui.add_sized([ui.available_width(), 20.0], egui::Label::new(egui::RichText::new(&footer).size(12.0).color(browser_ui::theme::MUTED)).truncate()).on_hover_text(&footer);
+                    if self.pending.is_some() {
+                        ui.spinner();
+                    }
+                    ui.add_sized(
+                        [ui.available_width(), 20.0],
+                        egui::Label::new(
+                            egui::RichText::new(&footer)
+                                .size(12.0)
+                                .color(browser_ui::theme::MUTED),
+                        )
+                        .truncate(),
+                    )
+                    .on_hover_text(&footer);
                 });
             });
 
@@ -495,17 +689,24 @@ fn document_title(dom: &Dom) -> Option<String> {
 
 fn is_renderable_text(content_type: &str) -> bool {
     let content_type = content_type.to_ascii_lowercase();
-    content_type.starts_with("text/") || content_type.contains("html") || content_type.contains("xhtml") || content_type.contains("xml")
+    content_type.starts_with("text/")
+        || content_type.contains("html")
+        || content_type.contains("xhtml")
+        || content_type.contains("xml")
 }
 
 fn escape_html(input: &str) -> String {
-    input.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;")
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::html;
     use super::{document_title, escape_html};
+    use crate::html;
 
     #[test]
     fn extracts_title() {
@@ -514,5 +715,7 @@ mod tests {
     }
 
     #[test]
-    fn escapes_plain_text() { assert_eq!(escape_html("<a&b>"), "&lt;a&amp;b&gt;"); }
+    fn escapes_plain_text() {
+        assert_eq!(escape_html("<a&b>"), "&lt;a&amp;b&gt;");
+    }
 }

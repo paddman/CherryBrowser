@@ -125,15 +125,25 @@ impl Workspace {
         match result {
             Ok(()) => {
                 self.dirty = false;
-                self.notice = Some("Workspace saved locally. Browsing history was not saved.".into());
+                self.notice =
+                    Some("Workspace saved locally. Browsing history was not saved.".into());
             }
-            Err(error) => self.notice = Some(format!("Save failed: {error}. Your edits remain in memory.")),
+            Err(error) => {
+                self.notice = Some(format!(
+                    "Save failed: {error}. Your edits remain in memory."
+                ))
+            }
         }
     }
 
     pub fn bookmark(&mut self, title: &str, url: &str) -> Result<(), String> {
         let link = make_bookmark(title, url)?;
-        if let Some(existing) = self.data.bookmarks.iter_mut().find(|item| item.url == link.url) {
+        if let Some(existing) = self
+            .data
+            .bookmarks
+            .iter_mut()
+            .find(|item| item.url == link.url)
+        {
             *existing = link;
         } else {
             if self.data.bookmarks.len() >= MAX_BOOKMARKS {
@@ -149,10 +159,22 @@ impl Workspace {
     pub fn save_draft(&mut self) {
         let result = make_bookmark(&self.draft_title, &self.draft_url).and_then(|link| {
             if let Some(original) = self.editing_url.as_ref()
-                && let Some(index) = self.data.bookmarks.iter().position(|item| &item.url == original)
+                && let Some(index) = self
+                    .data
+                    .bookmarks
+                    .iter()
+                    .position(|item| &item.url == original)
             {
-                if self.data.bookmarks.iter().enumerate().any(|(i, item)| i != index && item.url == link.url) {
-                    return Err("That URL is already bookmarked. Edit the existing entry instead.".into());
+                if self
+                    .data
+                    .bookmarks
+                    .iter()
+                    .enumerate()
+                    .any(|(i, item)| i != index && item.url == link.url)
+                {
+                    return Err(
+                        "That URL is already bookmarked. Edit the existing entry instead.".into(),
+                    );
                 }
                 self.data.bookmarks[index] = link;
                 self.dirty = true;
@@ -166,7 +188,8 @@ impl Workspace {
                 self.draft_title.clear();
                 self.draft_url.clear();
                 self.editing_url = None;
-                self.notice = Some("Bookmark updated. Save workspace to persist your changes.".into());
+                self.notice =
+                    Some("Bookmark updated. Save workspace to persist your changes.".into());
             }
             Err(error) => self.notice = Some(error),
         }
@@ -180,7 +203,10 @@ pub fn http_url(input: &str) -> Result<String, String> {
     let normalized = crate::net::normalize_url(input)?;
     let url = Url::parse(&normalized).map_err(|error| error.to_string())?;
     if !url.username().is_empty() || url.password().is_some() {
-        return Err("URLs containing credentials are not accepted. Use a URL without user:password@.".into());
+        return Err(
+            "URLs containing credentials are not accepted. Use a URL without user:password@."
+                .into(),
+        );
     }
     if url.host_str().is_none() {
         return Err("URL must have a host".into());
@@ -212,7 +238,10 @@ pub fn navigation_target(input: &str, provider: SearchProvider) -> Result<String
         return Err(format!("Unsupported or malformed URL scheme: {scheme}"));
     }
     let looks_like_host = !input.contains(char::is_whitespace)
-        && (authority.contains('.') || authority == "localhost" || host_port || authority.starts_with('['));
+        && (authority.contains('.')
+            || authority == "localhost"
+            || host_port
+            || authority.starts_with('['));
     if looks_like_host {
         return http_url(input);
     }
@@ -277,7 +306,11 @@ fn encode(data: &SavedWorkspace) -> Result<String, String> {
     );
     for link in &data.bookmarks {
         let link = make_bookmark(&link.title, &link.url)?;
-        text.push_str(&format!("site\t{}\t{}\n", escape(&link.title), escape(&link.url)));
+        text.push_str(&format!(
+            "site\t{}\t{}\n",
+            escape(&link.title),
+            escape(&link.url)
+        ));
     }
     if text.len() > MAX_FILE_BYTES {
         return Err("Workspace file is too large".into());
@@ -332,9 +365,15 @@ fn parse_bool(value: &str) -> Result<bool, String> {
 }
 
 fn storage_path() -> Option<PathBuf> {
-    let home = || std::env::var_os("HOME").filter(|value| !value.is_empty()).map(PathBuf::from);
+    let home = || {
+        std::env::var_os("HOME")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
+    };
     let base = if cfg!(target_os = "windows") {
-        std::env::var_os("LOCALAPPDATA").filter(|value| !value.is_empty()).map(PathBuf::from)
+        std::env::var_os("LOCALAPPDATA")
+            .filter(|value| !value.is_empty())
+            .map(PathBuf::from)
     } else if cfg!(target_os = "macos") {
         home().map(|path| path.join("Library/Application Support"))
     } else {
@@ -350,7 +389,10 @@ fn storage_path() -> Option<PathBuf> {
 fn atomic_write(path: &Path, text: &str) -> Result<(), String> {
     let parent = path.parent().ok_or("Invalid workspace path")?;
     fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    let nonce = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|error| error.to_string())?.as_nanos();
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|error| error.to_string())?
+        .as_nanos();
     let temporary = parent.join(format!(".workspace-{}-{nonce}.tmp", std::process::id()));
     let mut options = OpenOptions::new();
     options.write(true).create_new(true);
@@ -360,7 +402,9 @@ fn atomic_write(path: &Path, text: &str) -> Result<(), String> {
         options.mode(0o600);
     }
     // A complete temporary file is written before the destination is replaced.
-    let mut file = options.open(&temporary).map_err(|error| error.to_string())?;
+    let mut file = options
+        .open(&temporary)
+        .map_err(|error| error.to_string())?;
     let result = (|| {
         file.write_all(text.as_bytes())?;
         file.sync_all()?;
@@ -379,23 +423,41 @@ mod tests {
 
     #[test]
     fn search_encodes_unicode_and_query_delimiters() {
-        let target = navigation_target("ภาษาไทย Rust & a=b #test", SearchProvider::DuckDuckGo).unwrap();
+        let target =
+            navigation_target("ภาษาไทย Rust & a=b #test", SearchProvider::DuckDuckGo).unwrap();
         let url = Url::parse(&target).unwrap();
         assert_eq!(url.host_str(), Some("html.duckduckgo.com"));
-        assert_eq!(url.query_pairs().collect::<Vec<_>>(), vec![("q".into(), "ภาษาไทย Rust & a=b #test".into())]);
+        assert_eq!(
+            url.query_pairs().collect::<Vec<_>>(),
+            vec![("q".into(), "ภาษาไทย Rust & a=b #test".into())]
+        );
         assert!(url.fragment().is_none());
     }
 
     #[test]
     fn url_and_host_port_are_not_search_queries() {
-        for input in ["example.com", "https://example.com/a?q=x", "localhost:8080", "[::1]:8080"] {
-            assert!(!navigation_target(input, SearchProvider::Bing).unwrap().contains("bing.com"));
+        for input in [
+            "example.com",
+            "https://example.com/a?q=x",
+            "localhost:8080",
+            "[::1]:8080",
+        ] {
+            assert!(
+                !navigation_target(input, SearchProvider::Bing)
+                    .unwrap()
+                    .contains("bing.com")
+            );
         }
     }
 
     #[test]
     fn rejects_unsafe_schemes_and_credentials() {
-        for input in ["javascript:alert(1)", "file:///etc/passwd", "data:text/html,x", "https://user:pass@example.com"] {
+        for input in [
+            "javascript:alert(1)",
+            "file:///etc/passwd",
+            "data:text/html,x",
+            "https://user:pass@example.com",
+        ] {
             assert!(navigation_target(input, SearchProvider::DuckDuckGo).is_err());
         }
     }
@@ -414,13 +476,19 @@ mod tests {
             search_provider: SearchProvider::Bing,
             ..SavedWorkspace::default()
         };
-        data.bookmarks.push(make_bookmark("Rust ภาษาไทย", "https://example.com/?a=1&b=2").unwrap());
+        data.bookmarks
+            .push(make_bookmark("Rust ภาษาไทย", "https://example.com/?a=1&b=2").unwrap());
         assert_eq!(decode(&encode(&data).unwrap()).unwrap(), data);
     }
 
     #[test]
     fn malformed_data_is_rejected_not_silently_replaced() {
-        for text in ["bad header", "CHERRY-WORKSPACE-1\nfocus\tmaybe", "CHERRY-WORKSPACE-1\nnotes\tbad\\x", "CHERRY-WORKSPACE-1\nsite\tX\tfile:///tmp/x"] {
+        for text in [
+            "bad header",
+            "CHERRY-WORKSPACE-1\nfocus\tmaybe",
+            "CHERRY-WORKSPACE-1\nnotes\tbad\\x",
+            "CHERRY-WORKSPACE-1\nsite\tX\tfile:///tmp/x",
+        ] {
             assert!(decode(text).is_err());
         }
     }
@@ -429,7 +497,9 @@ mod tests {
     fn bookmark_updates_are_deduplicated() {
         let mut workspace = Workspace::default();
         workspace.bookmark("First", "example.com").unwrap();
-        workspace.bookmark("Updated", "https://example.com/").unwrap();
+        workspace
+            .bookmark("Updated", "https://example.com/")
+            .unwrap();
         assert_eq!(workspace.data.bookmarks.len(), 1);
         assert_eq!(workspace.data.bookmarks[0].title, "Updated");
         assert!(workspace.dirty);
@@ -450,19 +520,34 @@ mod tests {
 
     #[test]
     fn notes_and_bookmarks_have_limits() {
-        let data = SavedWorkspace { notes: "x".repeat(MAX_NOTE_CHARS + 1), ..SavedWorkspace::default() };
+        let data = SavedWorkspace {
+            notes: "x".repeat(MAX_NOTE_CHARS + 1),
+            ..SavedWorkspace::default()
+        };
         assert!(encode(&data).is_err());
         let mut workspace = Workspace::default();
         for i in 0..MAX_BOOKMARKS {
-            workspace.bookmark("Site", &format!("https://example.com/{i}")).unwrap();
+            workspace
+                .bookmark("Site", &format!("https://example.com/{i}"))
+                .unwrap();
         }
-        assert!(workspace.bookmark("Overflow", "https://example.org").is_err());
+        assert!(
+            workspace
+                .bookmark("Overflow", "https://example.org")
+                .is_err()
+        );
     }
 
     #[test]
     fn atomic_save_replaces_a_complete_file() {
-        let nonce = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos();
-        let directory = std::env::temp_dir().join(format!("cherry-workspace-test-{}-{nonce}", std::process::id()));
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let directory = std::env::temp_dir().join(format!(
+            "cherry-workspace-test-{}-{nonce}",
+            std::process::id()
+        ));
         let path = directory.join("workspace.txt");
         atomic_write(&path, "first").unwrap();
         atomic_write(&path, "second").unwrap();
