@@ -1,169 +1,84 @@
 use eframe::egui;
 
-use super::theme;
+use super::{Action, ShellPage, theme};
 
-pub fn show(ui: &mut egui::Ui) {
+pub fn show(ui: &mut egui::Ui) -> Option<Action> {
+    let mut action = None;
     theme::card().show(ui, |ui| {
-        ui.set_min_width(248.0);
-        ui.set_max_width(272.0);
-
-        ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("CHERRY AI").strong().color(theme::TEXT));
-            ui.label(egui::RichText::new("●").color(theme::GOOD));
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let _ = ui.small_button("⋯");
-            });
-        });
-        ui.label(
-            egui::RichText::new("Always here for a brighter internet.")
-                .size(10.0)
-                .color(theme::MUTED),
-        );
-        ui.add_space(10.0);
-
+        ui.label(egui::RichText::new("CHERRY").size(18.0).strong().color(theme::TEXT));
+        ui.label(egui::RichText::new("YOUR WORKSPACE COMPANION").size(10.0).color(theme::BLUE));
+        ui.add_space(14.0);
         mascot(ui);
-
-        ui.add_space(10.0);
-        ui.horizontal(|ui| {
-            selectable_pill(ui, "Chat", true);
-            selectable_pill(ui, "Search", false);
-            selectable_pill(ui, "Tools", false);
-        });
-        ui.add_space(10.0);
-
-        action_row(ui, "Summarize this page", "⌁");
-        action_row(ui, "Explain something", "?");
-        action_row(ui, "Find related content", "⌕");
-        action_row(ui, "Translate / Rewrite", "文");
-        action_row(ui, "Help with research", "✦");
-        action_row(ui, "Open in workspace", "＋");
-
-        ui.add_space(10.0);
-        let mut prompt = String::new();
-        ui.add_sized(
-            [ui.available_width(), 32.0],
-            egui::TextEdit::singleline(&mut prompt).hint_text("Ask Cherry anything…"),
-        );
-        ui.add_space(7.0);
-        ui.label(
-            egui::RichText::new("Browse smarter · Think farther · Together")
-                .size(9.0)
-                .color(theme::MUTED),
-        );
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("One idea at a time.").size(18.0).strong());
+        ui.label("Collect a useful page, write a note, and keep the next step close.");
+        ui.add_space(12.0);
+        if ui.add_sized([ui.available_width(), 36.0], egui::Button::new("Open research notes")).clicked() { action = Some(Action::Section(ShellPage::Research)); }
+        if ui.add_sized([ui.available_width(), 36.0], egui::Button::new("Find a bookmark")).clicked() { action = Some(Action::Section(ShellPage::Bookmarks)); }
+        ui.add_space(16.0);
+        ui.separator();
+        ui.add_space(8.0);
+        ui.label(egui::RichText::new("AI NOT CONNECTED").size(11.0).color(theme::MUTED));
+        ui.label("Chat, translation and AI summaries are not available yet. Nothing is sent to an AI service.");
+        ui.add_space(12.0);
+        ui.small("Ctrl/Cmd+K  Commands\nCtrl/Cmd+L  Address\nCtrl/Cmd+D  Bookmark page");
     });
+    action
 }
 
 fn mascot(ui: &mut egui::Ui) {
     let width = ui.available_width();
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 158.0), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 170.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
-
-    painter.rect_filled(rect, 8.0, egui::Color32::from_rgb(7, 24, 57));
-    let center = egui::pos2(rect.center().x, rect.center().y + 7.0);
-
-    // Futuristic halo / data orbit.
-    painter.circle_stroke(center, 62.0, egui::Stroke::new(1.0, theme::BLUE));
-    painter.circle_stroke(
-        center,
-        49.0,
-        egui::Stroke::new(1.0, egui::Color32::from_rgb(54, 82, 152)),
+    painter.rect_filled(rect, 10.0, theme::PANEL_ALT);
+    let center = rect.center() + egui::vec2(0.0, -5.0);
+    painter.circle_stroke(center, 63.0, egui::Stroke::new(1.0, theme::BORDER));
+    painter.circle_stroke(center, 53.0, egui::Stroke::new(1.0, theme::BLUE));
+    let hair = egui::Color32::from_rgb(43, 91, 176);
+    let skin = egui::Color32::from_rgb(245, 216, 205);
+    // Short blue bob, white-and-blue jacket; no fruit, shield, key or padlock motifs.
+    painter.rect_filled(
+        egui::Rect::from_center_size(center + egui::vec2(0.0, -6.0), egui::vec2(79.0, 77.0)),
+        27.0,
+        hair,
     );
-    painter.line_segment(
-        [
-            egui::pos2(rect.left() + 14.0, rect.bottom() - 23.0),
-            egui::pos2(rect.right() - 14.0, rect.top() + 25.0),
+    let face = center + egui::vec2(0.0, -5.0);
+    painter.circle_filled(face, 28.0, skin);
+    painter.add(egui::Shape::convex_polygon(
+        vec![
+            face + egui::vec2(-34.0, -8.0),
+            face + egui::vec2(-25.0, -35.0),
+            face + egui::vec2(10.0, -39.0),
+            face + egui::vec2(29.0, -24.0),
+            face + egui::vec2(-3.0, -12.0),
+            face + egui::vec2(-9.0, 0.0),
         ],
-        egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(75, 224, 255, 70)),
+        hair,
+        egui::Stroke::NONE,
+    ));
+    for dx in [-10.0, 11.0] {
+        painter.circle_filled(face + egui::vec2(dx, 3.0), 4.0, egui::Color32::WHITE);
+        painter.circle_filled(face + egui::vec2(dx, 4.0), 2.5, theme::BLUE);
+    }
+    painter.line_segment(
+        [face + egui::vec2(-5.0, 15.0), face + egui::vec2(5.0, 15.0)],
+        egui::Stroke::new(1.4, egui::Color32::from_rgb(168, 101, 109)),
     );
-
-    // Cherry avatar built as native vectors so the shell ships without raster baggage.
-    let face = egui::pos2(center.x, center.y - 9.0);
-    painter.circle_filled(face, 31.0, egui::Color32::from_rgb(245, 214, 207));
-    painter.circle_filled(
-        egui::pos2(face.x - 20.0, face.y - 13.0),
-        20.0,
-        egui::Color32::from_rgb(31, 80, 187),
-    );
-    painter.circle_filled(
-        egui::pos2(face.x + 17.0, face.y - 15.0),
-        19.0,
-        egui::Color32::from_rgb(26, 65, 166),
-    );
-    painter.circle_filled(
-        egui::pos2(face.x - 2.0, face.y - 23.0),
-        23.0,
-        egui::Color32::from_rgb(39, 102, 230),
-    );
-    painter.circle_filled(egui::pos2(face.x - 11.0, face.y + 2.0), 3.3, theme::BLUE);
-    painter.circle_filled(egui::pos2(face.x + 12.0, face.y + 2.0), 3.3, theme::BLUE);
+    let jacket =
+        egui::Rect::from_center_size(center + egui::vec2(0.0, 50.0), egui::vec2(101.0, 46.0));
+    painter.rect_filled(jacket, 16.0, theme::TEXT);
     painter.line_segment(
         [
-            egui::pos2(face.x - 8.0, face.y + 14.0),
-            egui::pos2(face.x + 8.0, face.y + 14.0),
-        ],
-        egui::Stroke::new(1.6, egui::Color32::from_rgb(180, 80, 94)),
-    );
-
-    let jacket = egui::Rect::from_center_size(
-        egui::pos2(center.x, rect.bottom() - 25.0),
-        egui::vec2(102.0, 46.0),
-    );
-    painter.rect_filled(jacket, 16.0, egui::Color32::from_rgb(226, 237, 255));
-    painter.line_segment(
-        [
-            egui::pos2(jacket.left() + 16.0, jacket.top() + 4.0),
-            egui::pos2(jacket.center().x, jacket.bottom() - 4.0),
+            jacket.left_top() + egui::vec2(18.0, 5.0),
+            jacket.center_bottom() - egui::vec2(0.0, 4.0),
         ],
         egui::Stroke::new(4.0, theme::BLUE),
     );
     painter.line_segment(
         [
-            egui::pos2(jacket.right() - 16.0, jacket.top() + 4.0),
-            egui::pos2(jacket.center().x, jacket.bottom() - 4.0),
+            jacket.right_top() + egui::vec2(-18.0, 5.0),
+            jacket.center_bottom() - egui::vec2(0.0, 4.0),
         ],
         egui::Stroke::new(4.0, theme::VIOLET),
     );
-
-    painter.text(
-        egui::pos2(rect.left() + 12.0, rect.top() + 10.0),
-        egui::Align2::LEFT_TOP,
-        "HI, I'M CHERRY",
-        egui::FontId::monospace(10.0),
-        theme::CYAN,
-    );
-    painter.text(
-        egui::pos2(rect.right() - 12.0, rect.bottom() - 10.0),
-        egui::Align2::RIGHT_BOTTOM,
-        "AI BROWSING COMPANION",
-        egui::FontId::monospace(9.0),
-        theme::MUTED,
-    );
-}
-
-fn selectable_pill(ui: &mut egui::Ui, text: &str, active: bool) {
-    let fill = if active {
-        egui::Color32::from_rgb(27, 74, 166)
-    } else {
-        egui::Color32::from_rgb(10, 23, 49)
-    };
-    ui.add(egui::Button::new(text).fill(fill));
-}
-
-fn action_row(ui: &mut egui::Ui, label: &str, icon: &str) {
-    egui::Frame::default()
-        .fill(egui::Color32::from_rgb(9, 21, 46))
-        .stroke(egui::Stroke::new(1.0, egui::Color32::from_rgb(28, 62, 121)))
-        .corner_radius(egui::CornerRadius::same(5))
-        .inner_margin(egui::Margin::symmetric(8, 6))
-        .show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(egui::RichText::new(icon).color(theme::CYAN));
-                ui.label(egui::RichText::new(label).size(11.0).color(theme::TEXT));
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new("›").color(theme::MUTED));
-                });
-            });
-        });
-    ui.add_space(5.0);
 }
