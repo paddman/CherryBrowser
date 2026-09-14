@@ -1,306 +1,149 @@
 use eframe::egui;
 
-use super::{ShellPage, assistant, design_system, research, settings, sidebar, theme, workspace};
+use super::{Action, ShellPage, assistant, model::Workspace, research, settings, sidebar, theme, workspace};
 
-/// Render the first-party CherryBrowser shell.
-/// Returns true when the user submits the home URL field.
-pub fn show(ui: &mut egui::Ui, url_input: &mut String, page: &mut ShellPage) -> bool {
-    let mut submit = false;
-
-    egui::ScrollArea::vertical()
-        .auto_shrink([false, false])
-        .show(ui, |ui| {
-            tab_strip(ui, page);
-            ui.add_space(8.0);
-
-            let available = ui.available_width().max(760.0);
-            let left_w = 206.0;
-            let right_w = 270.0;
-            let gap_budget = 28.0;
-            let center_w = (available - left_w - right_w - gap_budget).max(420.0);
-            let shell_height = if *page == ShellPage::NewTab {
-                560.0
-            } else {
-                720.0
-            };
-
-            ui.horizontal_top(|ui| {
-                ui.allocate_ui_with_layout(
-                    egui::vec2(left_w, shell_height),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| sidebar::show(ui, page),
-                );
-
-                ui.add_space(6.0);
-                ui.allocate_ui_with_layout(
-                    egui::vec2(center_w, shell_height),
-                    egui::Layout::top_down(egui::Align::Min),
-                    |ui| match page {
-                        ShellPage::NewTab => {
-                            hero(ui);
-                            ui.add_space(10.0);
-
-                            let response = ui.add_sized(
-                                [ui.available_width(), 38.0],
-                                egui::TextEdit::singleline(url_input)
-                                    .hint_text("Search or enter URL")
-                                    .margin(egui::Margin::symmetric(12, 8)),
-                            );
-                            let enter = ui.input(|input| input.key_pressed(egui::Key::Enter));
-                            if response.lost_focus() && enter {
-                                submit = true;
-                            }
-
-                            ui.add_space(9.0);
-                            workspace::quick_links(ui);
-                            ui.add_space(10.0);
-                            workspace::feature_cards(ui);
-                        }
-                        ShellPage::Research => research::show(ui),
-                        ShellPage::Settings => settings::show(ui),
-                    },
-                );
-
-                ui.add_space(6.0);
-                ui.allocate_ui_with_layout(
-                    egui::vec2(right_w, shell_height),
-                    egui::Layout::top_down(egui::Align::Min),
-                    assistant::show,
-                );
-            });
-
-            if *page == ShellPage::NewTab {
-                ui.add_space(12.0);
-                workspace::bottom_dock(ui);
-                ui.add_space(10.0);
-                design_system::show(ui);
-            }
-
-            ui.add_space(18.0);
-            footer(ui, *page);
-            ui.add_space(8.0);
-        });
-
-    submit
+/// Breakpoints are based on available content width, never a forced minimum canvas.
+pub fn columns(width: f32, companion: bool, focus: bool) -> (f32, f32) {
+    let left = if width >= 1000.0 { 188.0 } else { 0.0 };
+    let right = if width >= 1320.0 && companion && !focus { 252.0 } else { 0.0 };
+    (left, right)
 }
 
-fn tab_strip(ui: &mut egui::Ui, page: &mut ShellPage) {
+pub fn show(
+    ui: &mut egui::Ui,
+    url_input: &mut String,
+    page: &mut ShellPage,
+    state: &mut Workspace,
+    history: &[String],
+    current_url: Option<&str>,
+) -> Option<Action> {
+    let mut action = None;
+    egui::ScrollArea::vertical().id_salt("workspace_scroll").auto_shrink([false, false]).show(ui, |ui| {
+        ui.spacing_mut().item_spacing = egui::vec2(12.0, 10.0);
+        let width = ui.available_width();
+        let (left, right) = columns(width, state.data.show_companion, state.data.focus_mode);
+        if left == 0.0 {
+            sidebar::compact(ui, page);
+            ui.add_space(12.0);
+        }
+        if state.dirty {
+            ui.horizontal_wrapped(|ui| {
+                ui.label(egui::RichText::new("Unsaved workspace edits").color(theme::VIOLET));
+                if ui.add_enabled(state.can_save(), egui::Button::new("Save workspace")).clicked() { action = Some(Action::SaveWorkspace); }
+                ui.small("Closing without saving discards edits.");
+            });
+            ui.add_space(10.0);
+        }
+        if let Some(notice) = state.notice.as_ref() {
+            ui.add(egui::Label::new(egui::RichText::new(notice).color(theme::CYAN)).wrap());
+            ui.add_space(10.0);
+        }
+        let gaps = 16.0 * (u8::from(left > 0.0) + u8::from(right > 0.0)) as f32;
+        let center = (width - left - right - gaps).max(1.0);
+        ui.spacing_mut().item_spacing.x = 16.0;
+        ui.horizontal_top(|ui| {
+            if left > 0.0 {
+                ui.allocate_ui_with_layout(egui::vec2(left, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                    if let Some(next) = sidebar::show(ui, page, state) { action = Some(next); }
+                });
+            }
+            ui.allocate_ui_with_layout(egui::vec2(center, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                let next = match *page {
+                    ShellPage::NewTab => new_tab(ui, url_input, state),
+                    ShellPage::Research => research::show(ui, state, current_url),
+                    ShellPage::Bookmarks => workspace::bookmarks(ui, state, true),
+                    ShellPage::History => workspace::history(ui, history, &mut state.filter),
+                    ShellPage::Settings => settings::show(ui, state),
+                };
+                if next.is_some() { action = next; }
+            });
+            if right > 0.0 {
+                ui.allocate_ui_with_layout(egui::vec2(right, 0.0), egui::Layout::top_down(egui::Align::Min), |ui| {
+                    if let Some(next) = assistant::show(ui) { action = Some(next); }
+                });
+            }
+        });
+        ui.add_space(20.0);
+        ui.horizontal_wrapped(|ui| {
+            ui.label(egui::RichText::new("CHERRY / BROWSE · THINK · CREATE").size(11.0).color(theme::MUTED));
+            ui.label(egui::RichText::new("Independent engine · milestone 0.3.4").size(11.0).color(theme::VIOLET));
+        });
+    });
+    action
+}
+
+fn new_tab(ui: &mut egui::Ui, url_input: &mut String, state: &mut Workspace) -> Option<Action> {
+    let mut action = None;
+    if !state.data.focus_mode {
+        hero(ui);
+        ui.add_space(16.0);
+    }
     theme::card().show(ui, |ui| {
-        ui.horizontal(|ui| {
-            if tab(ui, "New Tab", *page == ShellPage::NewTab, theme::BLUE) {
-                *page = ShellPage::NewTab;
-            }
-            if tab(
-                ui,
-                "Research Workspace",
-                *page == ShellPage::Research,
-                theme::CYAN,
-            ) {
-                *page = ShellPage::Research;
-            }
-            if tab(
-                ui,
-                "Design Systems",
-                *page == ShellPage::Settings,
-                theme::VIOLET,
-            ) {
-                *page = ShellPage::Settings;
-            }
-            let _ = tab(
-                ui,
-                "AI & Education",
-                false,
-                egui::Color32::from_rgb(255, 94, 171),
-            );
-            let _ = ui.small_button("+");
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(
-                    egui::RichText::new("CHERRY / NATIVE RUST UI")
-                        .size(9.0)
-                        .color(theme::MUTED),
-                );
-            });
+        theme::section_title(ui, "Where will your curiosity take you?", "Open a URL or search the web. No request is sent until you submit.");
+        ui.add_space(12.0);
+        let response = ui.add_sized([ui.available_width(), 42.0], egui::TextEdit::singleline(url_input).id(egui::Id::new("home_search")).hint_text("Search or enter an HTTP/HTTPS address").char_limit(4096).margin(egui::Margin::symmetric(12, 10)));
+        let enter = response.lost_focus() && ui.input(|input| input.key_pressed(egui::Key::Enter));
+        ui.horizontal_wrapped(|ui| {
+            if theme::primary_button(ui, "Search / Open") || enter { action = Some(Action::Go); }
+            ui.label(egui::RichText::new(format!("via {}", state.data.search_provider.label())).size(12.0).color(theme::MUTED));
+        });
+        ui.add_space(14.0);
+        ui.label(egui::RichText::new("START EXPLORING").size(11.0).color(theme::BLUE));
+        if let Some(next) = workspace::quick_links(ui) { action = Some(next); }
+    });
+    ui.add_space(16.0);
+    if let Some(next) = workspace::bookmarks(ui, state, false) { action = Some(next); }
+    ui.add_space(16.0);
+    theme::card().show(ui, |ui| {
+        theme::section_title(ui, "A little more room to think", "Keep your sources and notes together without a wall of dashboard widgets.");
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("Open research notes").clicked() { action = Some(Action::Section(ShellPage::Research)); }
+            if ui.button("Appearance & capabilities").clicked() { action = Some(Action::Section(ShellPage::Settings)); }
         });
     });
-}
-
-fn tab(ui: &mut egui::Ui, text: &str, active: bool, accent: egui::Color32) -> bool {
-    let fill = if active {
-        egui::Color32::from_rgb(17, 46, 102)
-    } else {
-        egui::Color32::from_rgb(8, 18, 40)
-    };
-    let button = egui::Button::new(egui::RichText::new(text).size(10.0).color(if active {
-        egui::Color32::WHITE
-    } else {
-        theme::MUTED
-    }))
-    .fill(fill)
-    .stroke(egui::Stroke::new(if active { 1.5 } else { 1.0 }, accent));
-    ui.add(button).clicked()
-}
-
-fn footer(ui: &mut egui::Ui, page: ShellPage) {
-    let section = match page {
-        ShellPage::NewTab => "NEW TAB",
-        ShellPage::Research => "RESEARCH WORKSPACE",
-        ShellPage::Settings => "SETTINGS / DESIGN SYSTEM",
-    };
-    ui.horizontal(|ui| {
-        ui.label(
-            egui::RichText::new("CHERRYBROWSER")
-                .strong()
-                .color(theme::TEXT),
-        );
-        ui.label(
-            egui::RichText::new(format!("— {section}"))
-                .size(10.0)
-                .color(theme::MUTED),
-        );
-        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-            ui.label(
-                egui::RichText::new("BROWSE · CREATE · CONNECT · TOGETHER")
-                    .size(9.0)
-                    .color(theme::VIOLET),
-            );
-        });
-    });
+    action
 }
 
 fn hero(ui: &mut egui::Ui) {
     let width = ui.available_width();
-    let height = (width * 0.34).clamp(215.0, 320.0);
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, height), egui::Sense::hover());
+    let (rect, _) = ui.allocate_exact_size(egui::vec2(width, 186.0), egui::Sense::hover());
     let painter = ui.painter_at(rect);
-
-    painter.rect_filled(rect, 10.0, egui::Color32::from_rgb(4, 14, 34));
-
-    // Holographic grid.
-    let grid = egui::Color32::from_rgba_unmultiplied(56, 126, 220, 48);
-    for i in 0..=12 {
-        let x = rect.left() + rect.width() * i as f32 / 12.0;
-        painter.line_segment(
-            [egui::pos2(x, rect.top()), egui::pos2(x, rect.bottom())],
-            egui::Stroke::new(1.0, grid),
-        );
+    painter.rect_filled(rect, 14.0, egui::Color32::from_rgb(17, 31, 57));
+    for i in 0..12 {
+        let x = rect.right() - 240.0 + i as f32 * 26.0;
+        let height = 20.0 + ((i * 29) % 70) as f32;
+        let tower = egui::Rect::from_min_size(egui::pos2(x, rect.bottom() - height), egui::vec2(15.0, height));
+        painter.rect_filled(tower, 2.0, egui::Color32::from_rgba_unmultiplied(72, 122, 204, 35));
     }
-    for i in 0..=7 {
-        let y = rect.top() + rect.height() * i as f32 / 7.0;
-        painter.line_segment(
-            [egui::pos2(rect.left(), y), egui::pos2(rect.right(), y)],
-            egui::Stroke::new(1.0, grid),
-        );
+    if width >= 600.0 {
+        let center = rect.right_center() - egui::vec2(104.0, 8.0);
+        for radius in [42.0, 63.0, 83.0] {
+            painter.circle_stroke(center, radius, egui::Stroke::new(1.0, egui::Color32::from_rgba_unmultiplied(125, 157, 235, 70)));
+        }
+        painter.circle_filled(center + egui::vec2(42.0, 0.0), 5.0, theme::CYAN);
+        painter.circle_filled(center + egui::vec2(-45.0, -44.0), 4.0, theme::VIOLET);
     }
+    painter.text(rect.left_top() + egui::vec2(24.0, 23.0), egui::Align2::LEFT_TOP, "WELCOME TO YOUR SPACE", egui::FontId::monospace(10.0), theme::CYAN);
+    painter.text(rect.left_top() + egui::vec2(24.0, 53.0), egui::Align2::LEFT_TOP, "Make room for\nyour next idea.", egui::FontId::proportional(if width < 400.0 { 27.0 } else { 34.0 }), theme::TEXT);
+    painter.text(rect.left_bottom() + egui::vec2(24.0, -20.0), egui::Align2::LEFT_BOTTOM, "CHERRY  /  BROWSE DIFFERENT", egui::FontId::monospace(10.0), theme::VIOLET);
+}
 
-    // Neon skyline with reflections.
-    let horizon = rect.bottom() - 34.0;
-    let building_w = (rect.width() / 32.0).max(9.0);
-    for i in 0..24 {
-        let x = rect.left() + 8.0 + i as f32 * rect.width() / 24.0;
-        let h = 26.0 + ((i * 41) % 118) as f32;
-        let tower = egui::Rect::from_min_max(
-            egui::pos2(x, horizon - h),
-            egui::pos2((x + building_w).min(rect.right() - 4.0), horizon),
-        );
-        let accent = if i % 3 == 0 {
-            theme::VIOLET
-        } else if i % 2 == 0 {
-            theme::CYAN
-        } else {
-            theme::BLUE
-        };
-        painter.rect_filled(tower, 1.0, egui::Color32::from_rgb(7, 27, 59));
-        painter.line_segment(
-            [tower.left_top(), tower.right_top()],
-            egui::Stroke::new(1.2, accent),
-        );
-        painter.line_segment(
-            [
-                egui::pos2(tower.center().x, horizon + 3.0),
-                egui::pos2(tower.center().x, rect.bottom() - 5.0),
-            ],
-            egui::Stroke::new(
-                0.7,
-                egui::Color32::from_rgba_unmultiplied(accent.r(), accent.g(), accent.b(), 80),
-            ),
-        );
+#[cfg(test)]
+mod tests {
+    use super::columns;
+
+    #[test]
+    fn narrow_windows_do_not_reserve_side_rails() {
+        for width in [320.0, 640.0, 768.0, 999.0] {
+            assert_eq!(columns(width, true, false), (0.0, 0.0));
+        }
     }
 
-    // Network globe on the right.
-    let center = egui::pos2(
-        rect.right() - rect.width() * 0.19,
-        rect.top() + rect.height() * 0.42,
-    );
-    let radius = (height * 0.25).min(width * 0.13);
-    painter.circle_stroke(center, radius, egui::Stroke::new(1.5, theme::BLUE));
-    painter.circle_stroke(center, radius * 0.68, egui::Stroke::new(1.0, grid));
-    painter.line_segment(
-        [
-            egui::pos2(center.x - radius, center.y),
-            egui::pos2(center.x + radius, center.y),
-        ],
-        egui::Stroke::new(1.0, grid),
-    );
-    painter.line_segment(
-        [
-            egui::pos2(center.x, center.y - radius),
-            egui::pos2(center.x, center.y + radius),
-        ],
-        egui::Stroke::new(1.0, grid),
-    );
-    let nodes = [
-        (-0.65, -0.15, theme::CYAN),
-        (-0.28, -0.62, theme::VIOLET),
-        (0.18, -0.35, theme::BLUE),
-        (0.64, -0.08, theme::CYAN),
-        (0.48, 0.48, theme::VIOLET),
-        (-0.18, 0.58, theme::BLUE),
-        (-0.66, 0.28, theme::CYAN),
-    ];
-    let mut pts = Vec::new();
-    for (nx, ny, color) in nodes {
-        let p = egui::pos2(center.x + nx * radius, center.y + ny * radius);
-        painter.circle_filled(p, 3.6, color);
-        pts.push((p, color));
+    #[test]
+    fn companion_is_optional_and_only_on_wide_windows() {
+        assert_eq!(columns(1100.0, true, false), (188.0, 0.0));
+        assert_eq!(columns(1440.0, true, false), (188.0, 252.0));
+        assert_eq!(columns(1440.0, false, false), (188.0, 0.0));
+        assert_eq!(columns(1440.0, true, true), (188.0, 0.0));
     }
-    for i in 0..pts.len() {
-        let (a, color) = pts[i];
-        let (b, _) = pts[(i + 2) % pts.len()];
-        painter.line_segment(
-            [a, b],
-            egui::Stroke::new(
-                1.0,
-                egui::Color32::from_rgba_unmultiplied(color.r(), color.g(), color.b(), 120),
-            ),
-        );
-    }
-
-    painter.text(
-        egui::pos2(rect.left() + 26.0, rect.top() + 24.0),
-        egui::Align2::LEFT_TOP,
-        "Good Morning",
-        egui::FontId::proportional(13.0),
-        theme::MUTED,
-    );
-    painter.text(
-        egui::pos2(rect.left() + 26.0, rect.top() + 48.0),
-        egui::Align2::LEFT_TOP,
-        "Explore a More\nOpen Tomorrow",
-        egui::FontId::proportional(30.0),
-        theme::TEXT,
-    );
-    painter.text(
-        egui::pos2(rect.left() + 28.0, rect.top() + 122.0),
-        egui::Align2::LEFT_TOP,
-        "CherryBrowser — Fast. Thoughtful. Yours.",
-        egui::FontId::proportional(12.0),
-        theme::CYAN,
-    );
-    painter.text(
-        egui::pos2(rect.left() + 28.0, rect.bottom() - 31.0),
-        egui::Align2::LEFT_BOTTOM,
-        "PEOPLE · IDEAS · AI · A BRIGHTER INTERNET",
-        egui::FontId::monospace(9.5),
-        theme::MUTED,
-    );
 }
